@@ -1,172 +1,175 @@
 import React, { useEffect, useState } from 'react';
-import { fetchEstoqueGeral, fetchEstoqueAlmoxarifado } from '../utils/dataFetcher';
-import type { EstoqueGeral, EstoqueAlmoxarifado } from '../utils/dataFetcher';
+import { Package, AlertTriangle, CheckCircle, Clock, Activity } from 'lucide-react';
+import { Pie, Column } from '@ant-design/plots';
+import { api } from '../utils/api';
+import type { Stats, Material } from '../utils/api';
 import { KPICard } from './KPICard';
-import { Package, DollarSign, Activity, Archive } from 'lucide-react';
-import { Column, Pie, Line } from '@ant-design/plots';
+import { AlertBadge } from './AlertBadge';
 
-const formatCurrency = (val: number) => {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(val);
-};
+interface Props {
+  almox: number;
+  onSelectMaterial: (codigo: number) => void;
+  onNavigate: (page: string) => void;
+}
 
-export const Dashboard: React.FC<{ theme: string }> = ({ theme }) => {
-  const [estoqueGeral, setEstoqueGeral] = useState<EstoqueGeral[]>([]);
-  const [estoqueAlmox, setEstoqueAlmox] = useState<EstoqueAlmoxarifado[]>([]);
+export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate }) => {
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [criticos, setCriticos] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([fetchEstoqueGeral(), fetchEstoqueAlmoxarifado()])
-      .then(([geral, almox]) => {
-        setEstoqueGeral(geral.filter(item => item.valor > 0 || item.qtd > 0)); // Filter out empty mock rows if any
-        setEstoqueAlmox(almox);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, []);
+    const load = async () => {
+      setLoading(true);
+      const [s, mat] = await Promise.all([
+        api.stats(almox),
+        api.materiais({ almox, limit: 8, page: 1 }),
+      ]);
+      setStats(s);
+      setCriticos(mat.data.filter(m => m.alerta === 'critico' || m.alerta === 'baixo').slice(0, 8));
+      setLoading(false);
+    };
+    load();
+  }, [almox]);
 
-  if (loading) {
-    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'var(--text-muted)' }}><h2>Carregando Dados...</h2></div>;
-  }
+  if (loading) return (
+    <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+      <div style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Carregando dashboard...</div>
+    </div>
+  );
 
-  // --- KPI Calculation ---
-  const totalValue = estoqueGeral.reduce((acc, item) => acc + item.valor, 0);
-  const totalQuantity = estoqueGeral.reduce((acc, item) => acc + item.qtd, 0);
-  
-  // Calculate Consignado percentages
-  const totalAlmoxItems = estoqueAlmox.length;
-  const consignadoItems = estoqueAlmox.filter(item => item.consignado === 'Sim').length;
-  const consignadoPercentage = totalAlmoxItems > 0 ? (consignadoItems / totalAlmoxItems) * 100 : 0;
+  const pieData = stats ? [
+    { type: 'Crítico',  value: Number(stats.critico) },
+    { type: 'Baixo',   value: Number(stats.baixo) },
+    { type: 'Atenção', value: Number(stats.atencao) },
+    { type: 'Normal',  value: Number(stats.normal) },
+  ].filter(d => d.value > 0) : [];
 
-  // --- Charts Data Manipulation ---
-
-  // 1. Top 10 Materials by Value
-  const topMaterials = [...estoqueGeral]
-    .sort((a, b) => b.valor - a.valor)
-    .slice(0, 10)
-    .map(item => ({
-      material: item.material.substring(0, 30) + '...', // truncate name
-      valor: item.valor
-    }));
-
-  const columnConfig = {
-    data: topMaterials,
-    xField: 'material',
-    yField: 'valor',
-    style: { fill: '#3a7bd5' },
-    axis: {
-      x: { labelAutoHide: true, labelAutoRotate: false },
-      y: { labelFormatter: (v: number) => `${(v / 1000).toFixed(0)}k` },
-    },
-    tooltip: { items: [{ field: 'valor', name: 'Valor', valueFormatter: formatCurrency }] },
-    theme: theme
-  };
-
-  // 2. ABC Classification Pie
-  const abcDataMap = estoqueGeral.reduce((acc, item) => {
-    const cls = item.classABC || 'N/A';
-    acc[cls] = (acc[cls] || 0) + item.valor;
-    return acc;
-  }, {} as Record<string, number>);
-  
-  const abcPieData = Object.keys(abcDataMap).map(key => ({
-    type: `Classe ${key}`,
-    value: abcDataMap[key]
+  const barData = criticos.map(m => ({
+    nome: m.nome.length > 28 ? m.nome.slice(0, 28) + '…' : m.nome,
+    estoque: Number(m.estoque),
   }));
 
   const pieConfig = {
-    data: abcPieData,
+    data: pieData,
     angleField: 'value',
     colorField: 'type',
-    radius: 0.8,
+    radius: 0.75,
+    innerRadius: 0.55,
     label: {
-      text: (d: { type: string; value: number }) => {
-        const pct = totalValue > 0 ? ((d.value / totalValue) * 100).toFixed(1) : '0';
-        return `${d.type}\n${pct}%`;
-      },
-      style: { fill: '#f8fafc', fontSize: 11 }
+      text: (d: { type: string; value: number }) =>
+        `${d.type}\n${d.value.toLocaleString('pt-BR')}`,
+      style: { fill: '#94a3b8', fontSize: 11 },
     },
-    scale: { color: { range: ['#00d2ff', '#3a7bd5', '#10b981', '#f59e0b', '#ef4444'] } },
-    theme: theme,
-    tooltip: { items: [{ field: 'value', name: 'Valor', valueFormatter: formatCurrency }] }
+    scale: {
+      color: { domain: ['Crítico', 'Baixo', 'Atenção', 'Normal'], range: ['#ef4444', '#f97316', '#f59e0b', '#10b981'] },
+    },
+    tooltip: {
+      items: [{ field: 'value', name: 'Materiais', valueFormatter: (v: number) => v.toLocaleString('pt-BR') }],
+    },
   };
 
-  // 3. Trend Mock (Usually uses sequence of dates, we will map Grupo to Value dynamically as demo line chart)
-  const grupoDataMap = estoqueGeral.reduce((acc, item) => {
-    if(!item.grupo) return acc;
-    acc[item.grupo] = (acc[item.grupo] || 0) + item.valor;
-    return acc;
-  }, {} as Record<string, number>);
-
-  const trendData = Object.keys(grupoDataMap).map(key => ({
-    grupo: key.substring(0, 15),
-    valor: grupoDataMap[key]
-  })).sort((a,b) => b.valor - a.valor).slice(0, 15);
-
-  const lineConfig = {
-    data: trendData,
-    xField: 'grupo',
-    yField: 'valor',
-    point: { shapeField: 'diamond', sizeField: 5 },
-    style: { stroke: '#00d2ff' },
-    theme: theme
+  const barConfig = {
+    data: barData,
+    xField: 'nome',
+    yField: 'estoque',
+    style: { fill: '#ef444488' },
+    axis: {
+      x: { labelAutoRotate: true, labelFill: '#94a3b8' },
+      y: { labelFill: '#94a3b8' },
+    },
+    tooltip: {
+      items: [{ field: 'estoque', name: 'Estoque', valueFormatter: (v: number) => v.toLocaleString('pt-BR') }],
+    },
   };
 
   return (
     <div className="content-area">
-      <div style={{ marginBottom: '8px' }}>
-        <h1 style={{ fontSize: '1.75rem', marginBottom: '8px' }}>Visualização de Painel</h1>
-        <p style={{ color: 'var(--text-muted)' }}>Resumo analítico dos materiais hospitalares (OPME e Gerais)</p>
+      <div>
+        <h1 style={{ fontSize: '1.75rem', marginBottom: '4px' }}>Dashboard</h1>
+        <p style={{ color: 'var(--text-muted)' }}>Materiais Hospitalares — Grupo 36 (AGHU)</p>
       </div>
 
+      {/* KPIs */}
       <div className="kpi-grid">
-        <KPICard 
-          title="Valor Total em Estoque" 
-          value={formatCurrency(totalValue)} 
-          icon={DollarSign} 
-          trend={2.4} 
-          trendText="vs mês anterior"
-        />
-        <KPICard 
-          title="Quantidade Total" 
-          value={totalQuantity.toLocaleString('pt-BR')} 
-          icon={Package} 
-        />
-        <KPICard 
-          title="Itens Consignados" 
-          value={`${consignadoPercentage.toFixed(1)}%`} 
-          icon={Archive} 
-          trend={-1.2}
-          trendText="dos materiais da Almox."
-        />
-        <KPICard 
-          title="Índice de Acerto (ABC)" 
-          value="94%" 
-          icon={Activity} 
-          trend={0.8}
-        />
+        <KPICard title="Total de Materiais" value={Number(stats?.total_materiais ?? 0).toLocaleString('pt-BR')} icon={Package} />
+        <KPICard title="Estoque Crítico (= 0)" value={Number(stats?.critico ?? 0).toLocaleString('pt-BR')} icon={AlertTriangle} />
+        <KPICard title="Estoque Baixo (< 10)" value={Number(stats?.baixo ?? 0).toLocaleString('pt-BR')} icon={Clock} />
+        <KPICard title="Estoque Normal (≥ 20)" value={Number(stats?.normal ?? 0).toLocaleString('pt-BR')} icon={CheckCircle} />
       </div>
 
+      {/* Charts */}
       <div className="charts-grid">
         <div className="glass-panel" style={{ padding: '24px' }}>
-          <h3 style={{ marginBottom: '24px', color: 'var(--text-muted)' }}>Top 10 Materiais por Valor ($)</h3>
-          <div style={{ height: '300px' }}>
-            <Column {...columnConfig} />
-          </div>
-        </div>
-
-        <div className="glass-panel" style={{ padding: '24px' }}>
-          <h3 style={{ marginBottom: '24px', color: 'var(--text-muted)' }}>Distribuição por Classe ABC</h3>
-          <div style={{ height: '300px' }}>
+          <h3 style={{ marginBottom: '20px', color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Distribuição por Status de Estoque
+          </h3>
+          <div style={{ height: '280px' }}>
             <Pie {...pieConfig} />
           </div>
         </div>
 
-        <div className="glass-panel" style={{ padding: '24px', gridColumn: '1 / -1' }}>
-          <h3 style={{ marginBottom: '24px', color: 'var(--text-muted)' }}>Curva de Valor por Grupo de Material</h3>
-          <div style={{ height: '250px' }}>
-            <Line {...lineConfig} />
+        <div className="glass-panel" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Materiais em Alerta
+            </h3>
+            <button onClick={() => onNavigate('materiais')} style={{
+              background: 'none', border: '1px solid var(--panel-border)', borderRadius: '6px',
+              padding: '4px 10px', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.75rem',
+            }}>Ver todos →</button>
+          </div>
+          <div style={{ height: '280px' }}>
+            {barData.length > 0
+              ? <Column {...barConfig} />
+              : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>Sem dados</div>
+            }
           </div>
         </div>
+      </div>
+
+      {/* Critical materials list */}
+      <div className="glass-panel" style={{ padding: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Activity size={18} color="#ef4444" />
+            Materiais Críticos e em Baixo Estoque
+          </h3>
+          <button onClick={() => onNavigate('materiais')} style={{
+            background: 'none', border: '1px solid var(--panel-border)', borderRadius: '6px',
+            padding: '4px 10px', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.75rem',
+          }}>Ver todos →</button>
+        </div>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--panel-border)' }}>
+              {['Código', 'Nome', 'Estoque', 'Consumo/mês', 'Ruptura em', 'Status'].map(h => (
+                <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {criticos.map(m => (
+              <tr key={m.codigo} onClick={() => onSelectMaterial(m.codigo)} style={{ borderBottom: '1px solid var(--panel-border)', cursor: 'pointer' }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--panel-highlight)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                <td style={{ padding: '10px 12px', fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{m.codigo}</td>
+                <td style={{ padding: '10px 12px', fontWeight: 500, maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.nome}</td>
+                <td style={{ padding: '10px 12px', fontWeight: 700, color: m.alerta === 'critico' ? '#ef4444' : '#f97316' }}>
+                  {Number(m.estoque).toLocaleString('pt-BR')}
+                </td>
+                <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>
+                  {Number(m.media_consumo_mensal) > 0 ? Math.round(Number(m.media_consumo_mensal)).toLocaleString('pt-BR') : '—'}
+                </td>
+                <td style={{ padding: '10px 12px' }}>
+                  {m.dias_ate_ruptura !== null
+                    ? <span style={{ color: m.dias_ate_ruptura < 30 ? '#ef4444' : '#f59e0b', fontWeight: 600 }}>{m.dias_ate_ruptura}d</span>
+                    : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                </td>
+                <td style={{ padding: '10px 12px' }}><AlertBadge level={m.alerta} /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
