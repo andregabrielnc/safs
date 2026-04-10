@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL || 'http://localhost:3041';
+const BASE = import.meta.env.VITE_API_URL ?? '';
 
 export interface Material {
   codigo: number;
