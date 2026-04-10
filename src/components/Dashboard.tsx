@@ -52,23 +52,12 @@ export const Dashboard: React.FC<{ theme: string }> = ({ theme }) => {
     data: topMaterials,
     xField: 'material',
     yField: 'valor',
-    color: 'l(90) 0:#00d2ff 1:#3a7bd5',
-    xAxis: {
-      label: {
-        autoHide: true,
-        autoRotate: false,
-        style: { fill: '#94a3b8' }
-      },
+    style: { fill: '#3a7bd5' },
+    axis: {
+      x: { labelAutoHide: true, labelAutoRotate: false },
+      y: { labelFormatter: (v: number) => `${(v / 1000).toFixed(0)}k` },
     },
-    yAxis: {
-      label: { 
-        formatter: (v: string) => `${(Number(v) / 1000).toFixed(0)}k`,
-        style: { fill: '#94a3b8' }
-      }
-    },
-    tooltip: {
-      formatter: (data: any) => ({ name: 'Valor', value: formatCurrency(data.valor) })
-    },
+    tooltip: { items: [{ field: 'valor', name: 'Valor', valueFormatter: formatCurrency }] },
     theme: theme
   };
 
@@ -85,22 +74,20 @@ export const Dashboard: React.FC<{ theme: string }> = ({ theme }) => {
   }));
 
   const pieConfig = {
-    appendPadding: 10,
     data: abcPieData,
     angleField: 'value',
     colorField: 'type',
     radius: 0.8,
     label: {
-      type: 'outer',
-      content: '{name} {percentage}',
-      style: { fill: '#f8fafc' }
+      text: (d: { type: string; value: number }) => {
+        const pct = totalValue > 0 ? ((d.value / totalValue) * 100).toFixed(1) : '0';
+        return `${d.type}\n${pct}%`;
+      },
+      style: { fill: '#f8fafc', fontSize: 11 }
     },
-    interactions: [{ type: 'element-active' }],
-    color: ['#00d2ff', '#3a7bd5', '#10b981', '#f59e0b', '#ef4444'],
+    scale: { color: { range: ['#00d2ff', '#3a7bd5', '#10b981', '#f59e0b', '#ef4444'] } },
     theme: theme,
-    tooltip: {
-      formatter: (data: any) => ({ name: data.type, value: formatCurrency(data.value) })
-    }
+    tooltip: { items: [{ field: 'value', name: 'Valor', valueFormatter: formatCurrency }] }
   };
 
   // 3. Trend Mock (Usually uses sequence of dates, we will map Grupo to Value dynamically as demo line chart)
@@ -119,14 +106,8 @@ export const Dashboard: React.FC<{ theme: string }> = ({ theme }) => {
     data: trendData,
     xField: 'grupo',
     yField: 'valor',
-    point: { size: 5, shape: 'diamond' },
-    color: '#00d2ff',
-    yAxis: {
-      label: { style: { fill: '#94a3b8' } }
-    },
-    xAxis: {
-      label: { style: { fill: '#94a3b8' } }
-    },
+    point: { shapeField: 'diamond', sizeField: 5 },
+    style: { stroke: '#00d2ff' },
     theme: theme
   };
 
