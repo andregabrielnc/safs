@@ -68,8 +68,9 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
 
   const estoque = Number(detalhe.estoque) || 0;
 
-  // Only months with real consumption (non-null, non-zero) for stats and trend
-  const mesesConsumo = consumo.filter(c => c.quantidade !== null && Number(c.quantidade) > 0);
+  // Only complete months with real consumption for stats and trend (exclude current partial month)
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const mesesConsumo = consumo.filter(c => c.quantidade !== null && Number(c.quantidade) > 0 && c.competencia < currentMonth);
   const mediaConsumo = mesesConsumo.length
     ? mesesConsumo.slice(-6).reduce((s, c) => s + Number(c.quantidade), 0) / Math.min(mesesConsumo.length, 6)
     : 0;

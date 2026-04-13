@@ -153,4 +153,8 @@ export const api = {
   markAllRead: (): Promise<{ ok: boolean }> =>
     fetch(`${BASE}/api/monitoramento/notificacoes/mark-read`, { method: 'POST' })
       .then(r => handleResponse<{ ok: boolean }>(r)),
+
+  checkNow: (mat_codigo: number, almox = 1): Promise<{ estoque: number; triggered: boolean }> =>
+    fetch(`${BASE}/api/monitoramento/itens/${mat_codigo}/check-now?almox=${almox}`, { method: 'POST' })
+      .then(r => handleResponse<{ estoque: number; triggered: boolean }>(r)),
 };

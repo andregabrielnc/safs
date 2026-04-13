@@ -24,7 +24,7 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
   const [error, setError] = useState<string | null>(null);
   const [selectedMat, setSelectedMat] = useState<number | null>(null);
   const [monitorModal, setMonitorModal] = useState<Material | null>(null);
-  const [monitoredCodes, setMonitoredCodes] = useState<Set<number>>(new Set());
+  const [monitoredMap, setMonitoredMap] = useState<Map<number, number>>(new Map()); // mat_codigo → level_id
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Stale-request guard: only the most recent load call may update state
   const loadSeqRef = useRef(0);
@@ -47,11 +47,17 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
 
   useEffect(() => { load(); }, [load]);
 
-  useEffect(() => {
+  const refreshMonitored = useCallback(() => {
     api.itensMonitorados()
-      .then((items: MonitoredItem[]) => setMonitoredCodes(new Set(items.filter(i => i.almox === almox).map(i => i.mat_codigo))))
+      .then((items: MonitoredItem[]) => {
+        const m = new Map<number, number>();
+        items.filter(i => i.almox === almox).forEach(i => m.set(i.mat_codigo, i.level_id));
+        setMonitoredMap(m);
+      })
       .catch(() => {});
   }, [almox]);
+
+  useEffect(() => { refreshMonitored(); }, [refreshMonitored]);
 
   // Debounce search — reset to page 1
   useEffect(() => {
@@ -207,17 +213,17 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
                     <td style={{ padding: '12px 8px', textAlign: 'right' }}>
                       <button
                         onClick={e => { e.stopPropagation(); setMonitorModal(m); }}
-                        title={monitoredCodes.has(m.codigo) ? 'Monitorando — clique para editar' : 'Monitorar este material'}
+                        title={monitoredMap.has(m.codigo) ? 'Monitorando — clique para editar' : 'Monitorar este material'}
                         style={{
                           background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px',
-                          color: monitoredCodes.has(m.codigo) ? 'var(--primary)' : 'var(--text-muted)',
+                          color: monitoredMap.has(m.codigo) ? 'var(--primary)' : 'var(--text-muted)',
                           opacity: 0.7, transition: 'opacity 0.15s, color 0.15s',
                           display: 'flex', alignItems: 'center',
                         }}
                         onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '1'; }}
                         onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.opacity = '0.7'; }}
                       >
-                        <Bell size={15} fill={monitoredCodes.has(m.codigo) ? 'currentColor' : 'none'} />
+                        <Bell size={15} fill={monitoredMap.has(m.codigo) ? 'currentColor' : 'none'} />
                       </button>
                     </td>
                   </tr>
@@ -261,13 +267,9 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
           matNome={monitorModal.nome}
           matUmd={monitorModal.umd_codigo}
           almox={almox}
-          currentLevelId={monitoredCodes.has(monitorModal.codigo) ? undefined : null}
+          currentLevelId={monitoredMap.get(monitorModal.codigo) ?? null}
           onClose={() => setMonitorModal(null)}
-          onSave={() => {
-            api.itensMonitorados()
-              .then((items: MonitoredItem[]) => setMonitoredCodes(new Set(items.filter(i => i.almox === almox).map(i => i.mat_codigo))))
-              .catch(() => {});
-          }}
+          onSave={refreshMonitored}
         />
       )}
     </div>

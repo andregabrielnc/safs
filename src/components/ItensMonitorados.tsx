@@ -38,10 +38,8 @@ export const ItensMonitorados: React.FC<Props> = ({ almox, onSelectMaterial }) =
   const handleCheckNow = async (mat_codigo: number) => {
     setChecking(mat_codigo);
     try {
-      const result = await fetch(`/api/monitoramento/itens/${mat_codigo}/check-now?almox=${almox}`, { method: 'POST' })
-        .then(r => r.json());
+      const result = await api.checkNow(mat_codigo, almox);
       if (result.triggered) {
-        // Refresh notifications
         api.notificacoes().then(setNotifications).catch(() => {});
       }
     } catch {}
