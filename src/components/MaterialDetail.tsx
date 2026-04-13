@@ -135,12 +135,21 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
     ...(hasSaldo   ? ['#a78bfa'] : []),
   ];
 
+  // All months across every series, sorted chronologically.
+  // G2 v5 determines x-axis order by first appearance in data[]; since
+  // mesesConsumo is sparse (no stock-only months), stock months would be
+  // appended out of order causing zigzag. Explicit domain fixes this.
+  const allMonths = [...new Set([
+    ...mesesConsumo.map(c => c.competencia),
+    ...consumo.filter(c => c.saldo !== null).map(c => c.competencia),
+  ])].sort();
+
   const consumoConfig = {
     data: chartData,
     xField: 'mes',
     yField: 'valor',
     colorField: 'tipo',
-    scale: { color: { domain: colorDomain, range: colorRange } },
+    scale: { x: { domain: allMonths }, color: { domain: colorDomain, range: colorRange } },
     style: { lineWidth: 2 },
     point: { size: 3 },
     axis: {
