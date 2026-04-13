@@ -11,7 +11,7 @@ import { api } from './utils/api';
 type Page = 'dashboard' | 'materiais' | 'previsor' | 'monitoramento' | 'monitorados';
 
 function App() {
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState('light');
   const [page, setPage] = useState<Page>('dashboard');
   const [almox, setAlmox] = useState(1);
   const [almoxarifados, setAlmoxarifados] = useState<{ seq: number; descricao: string }[]>([]);
