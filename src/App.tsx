@@ -2,13 +2,12 @@ import { useState, useEffect } from 'react';
 import { AppLayout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
 import { MateriaisG36 } from './components/MateriaisG36';
-import { Previsor } from './components/Previsor';
 import { MaterialDetail } from './components/MaterialDetail';
 import { Monitoramento } from './components/Monitoramento';
 import { ItensMonitorados } from './components/ItensMonitorados';
 import { api } from './utils/api';
 
-type Page = 'dashboard' | 'materiais' | 'previsor' | 'monitoramento' | 'monitorados';
+type Page = 'dashboard' | 'materiais' | 'monitoramento' | 'monitorados';
 
 function App() {
   const [theme, setTheme] = useState('light');
@@ -49,8 +48,6 @@ function App() {
         return <Dashboard almox={almox} onSelectMaterial={handleSelectMaterial} onNavigate={p => setPage(p as Page)} />;
       case 'materiais':
         return <MateriaisG36 almox={almox} />;
-      case 'previsor':
-        return <Previsor almox={almox} />;
       case 'monitoramento':
         return <Monitoramento />;
       case 'monitorados':

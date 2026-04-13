@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Package, BrainCircuit, Sun, Moon, Activity, Bell } from 'lucide-react';
+import { LayoutDashboard, Package, Sun, Moon, Activity, Bell } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 
 interface LayoutProps {
@@ -14,10 +14,9 @@ interface LayoutProps {
 }
 
 const navItems = [
-  { id: 'dashboard',      label: 'Dashboard',      icon: LayoutDashboard },
-  { id: 'materiais',      label: 'Materiais G36',   icon: Package },
-  { id: 'previsor',       label: 'Criticidade',     icon: BrainCircuit },
-  { id: 'monitoramento',  label: 'Monitoramento',   icon: Bell },
+  { id: 'dashboard',     label: 'Dashboard',     icon: LayoutDashboard },
+  { id: 'materiais',     label: 'Materiais G36',  icon: Package },
+  { id: 'monitoramento', label: 'Monitoramento',  icon: Bell },
 ];
 
 export const AppLayout: React.FC<LayoutProps> = ({
