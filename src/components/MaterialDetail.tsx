@@ -326,7 +326,6 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
       <div style={{ display: activeTab === 'ene' ? 'contents' : 'none' }}>
         <EneTab
           contratos={ene}
-          umd={detalhe.umd_codigo}
           matCodigo={detalhe.codigo}
           matNome={detalhe.nome}
           onMonitorChange={() => api.eneContratos(codigo).then(setEne).catch(() => {})}
@@ -800,9 +799,8 @@ function ContratoTable({
   );
 }
 
-function EneTab({ contratos, umd, matCodigo, matNome, onMonitorChange }: {
+function EneTab({ contratos, matCodigo, matNome, onMonitorChange }: {
   contratos: EneContrato[];
-  umd: string;
   matCodigo: number;
   matNome: string;
   onMonitorChange: () => void;
@@ -862,7 +860,7 @@ function EneTab({ contratos, umd, matCodigo, matNome, onMonitorChange }: {
             <FileText size={20} color="var(--primary)" />
           </div>
           <div className="kpi-value" style={{ color: totalSaldoAtivo <= 0 ? '#ef4444' : 'var(--primary)' }}>
-            {totalSaldoAtivo.toLocaleString('pt-BR')} {umd}
+            {totalSaldoAtivo.toLocaleString('pt-BR')}
           </div>
         </div>
         <div className="glass-panel kpi-card" style={{ borderTop: '2px solid #10b981' }}>
@@ -871,7 +869,7 @@ function EneTab({ contratos, umd, matCodigo, matNome, onMonitorChange }: {
             <Package size={20} color="#10b981" />
           </div>
           <div className="kpi-value" style={{ color: '#10b981' }}>
-            {totalContratadoAtivo.toLocaleString('pt-BR')} {umd}
+            {totalContratadoAtivo.toLocaleString('pt-BR')}
           </div>
         </div>
         <div className="glass-panel kpi-card" style={{ borderTop: '2px solid #f59e0b' }}>
@@ -880,7 +878,7 @@ function EneTab({ contratos, umd, matCodigo, matNome, onMonitorChange }: {
             <TrendingUp size={20} color="#f59e0b" />
           </div>
           <div className="kpi-value" style={{ color: '#f59e0b' }}>
-            {totalEmpenhadoAtivo.toLocaleString('pt-BR')} {umd}
+            {totalEmpenhadoAtivo.toLocaleString('pt-BR')}
           </div>
         </div>
         <div className="glass-panel kpi-card" style={{ borderTop: '2px solid var(--secondary)' }}>
