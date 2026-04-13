@@ -54,7 +54,7 @@ export const ItensMonitorados: React.FC<Props> = ({ almox, onSelectMaterial }) =
   }, {});
 
   const formatDate = (s: string) =>
-    new Date(s + 'Z').toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+    new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 
   if (loading) return (
     <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
@@ -130,7 +130,7 @@ export const ItensMonitorados: React.FC<Props> = ({ almox, onSelectMaterial }) =
                       <span>Código: <b style={{ color: 'var(--text-main)' }}>{item.mat_codigo}</b></span>
                       <span>Nível: <b style={{ color: item.level_cor }}>{item.level_nome}</b></span>
                       <span>Limite: <b style={{ color: 'var(--text-main)' }}>≤ {item.level_quantidade} {item.mat_umd}</b></span>
-                      <span>Desde: {new Date(item.criado_em + 'Z').toLocaleDateString('pt-BR')}</span>
+                      <span>Desde: {new Date(item.criado_em).toLocaleDateString('pt-BR')}</span>
                     </div>
 
                     {/* Last notification */}

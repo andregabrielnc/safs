@@ -50,7 +50,7 @@ export const NotificationBell: React.FC<Props> = ({ onNavigateMonitorados }) => 
   };
 
   const formatDate = (s: string) =>
-    new Date(s + 'Z').toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
   return (
     <div ref={ref} style={{ position: 'relative' }}>
