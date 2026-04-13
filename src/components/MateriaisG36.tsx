@@ -31,7 +31,8 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
   const [page, setPage]               = useState(1);
   const [search, setSearch]           = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [alertFilter, setAlertFilter] = useState<AlertFilter>('todos');
+  const [alertFilter, setAlertFilter]     = useState<AlertFilter>('todos');
+  const [contratoFilter, setContratoFilter] = useState<'todos' | 'com' | 'sem'>('todos');
   const [loading, setLoading]         = useState(false);
   const [exporting, setExporting]     = useState(false);
   const [error, setError]             = useState<string | null>(null);
@@ -46,7 +47,7 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
     const seq = ++loadSeqRef.current;
     setLoading(true); setError(null);
     try {
-      const result = await api.materiais({ page, limit: LIMIT, search: debouncedSearch, almox, alerta: alertFilter });
+      const result = await api.materiais({ page, limit: LIMIT, search: debouncedSearch, almox, alerta: alertFilter, contrato: contratoFilter !== 'todos' ? contratoFilter : undefined });
       if (seq !== loadSeqRef.current) return;
       setData(result);
     } catch (err) {
@@ -55,7 +56,7 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [page, debouncedSearch, almox, alertFilter]);
+  }, [page, debouncedSearch, almox, alertFilter, contratoFilter]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -97,11 +98,11 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [search, almox]);
 
-  useEffect(() => { setPage(1); }, [alertFilter]);
+  useEffect(() => { setPage(1); }, [alertFilter, contratoFilter]);
 
   // ── Export helpers ───────────────────────────────────────────────────────────
   const fetchAll = async (): Promise<Material[]> => {
-    const result = await api.materiais({ page: 1, limit: 9999, search: debouncedSearch, almox, alerta: alertFilter });
+    const result = await api.materiais({ page: 1, limit: 9999, search: debouncedSearch, almox, alerta: alertFilter, contrato: contratoFilter !== 'todos' ? contratoFilter : undefined });
     return result.data;
   };
 
@@ -237,13 +238,37 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
             />
           </div>
 
-          {/* Filter pills */}
+          {/* Filter pills — status estoque */}
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             {(['todos', 'critico', 'baixo', 'atencao', 'normal'] as AlertFilter[]).map(f => {
               const { label, color } = FILTER_META[f];
               const isActive = alertFilter === f;
               return (
                 <button key={f} onClick={() => setAlertFilter(f)} style={{
+                  padding: '6px 14px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 600,
+                  cursor: 'pointer', border: `1px solid ${color}44`,
+                  background: isActive ? `${color}22` : 'transparent',
+                  color: isActive ? color : 'var(--text-muted)',
+                  transition: 'var(--transition-smooth)',
+                }}>
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Separator */}
+          <div style={{ width: '1px', height: '28px', background: 'var(--panel-border)', flexShrink: 0 }} />
+
+          {/* Filter pills — contrato */}
+          <div style={{ display: 'flex', gap: '6px' }}>
+            {([
+              { key: 'com', label: 'Com contrato', color: '#6366f1' },
+              { key: 'sem', label: 'Sem contrato', color: '#94a3b8' },
+            ] as { key: 'com' | 'sem'; label: string; color: string }[]).map(({ key, label, color }) => {
+              const isActive = contratoFilter === key;
+              return (
+                <button key={key} onClick={() => setContratoFilter(isActive ? 'todos' : key)} style={{
                   padding: '6px 14px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: 600,
                   cursor: 'pointer', border: `1px solid ${color}44`,
                   background: isActive ? `${color}22` : 'transparent',

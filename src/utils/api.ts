@@ -158,7 +158,7 @@ export const api = {
     fetch(`${BASE}/api/g36/stats?almox=${almox}`).then(r => handleResponse<Stats>(r)),
 
   materiais: (params: {
-    page?: number; limit?: number; search?: string; almox?: number; alerta?: string;
+    page?: number; limit?: number; search?: string; almox?: number; alerta?: string; contrato?: string;
   } = {}): Promise<MateriaisResponse> => {
     const qs = new URLSearchParams({
       page: String(params.page ?? 1),
@@ -166,6 +166,7 @@ export const api = {
       almox: String(params.almox ?? 1),
       ...(params.search ? { search: params.search } : {}),
       ...(params.alerta && params.alerta !== 'todos' ? { alerta: params.alerta } : {}),
+      ...(params.contrato ? { contrato: params.contrato } : {}),
     });
     return fetch(`${BASE}/api/g36/materiais?${qs}`).then(r => handleResponse<MateriaisResponse>(r));
   },
