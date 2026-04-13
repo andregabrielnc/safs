@@ -331,31 +331,119 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
 };
 
 // ── ENE tab ────────────────────────────────────────────────────────────────
+const STATUS_LABEL: Record<string, { label: string; bg: string; color: string }> = {
+  'A EFETIVAR': { label: 'A Efetivar', bg: 'rgba(16,185,129,0.15)',  color: '#10b981' },
+  'PARCIAL':    { label: 'Parcial',    bg: 'rgba(245,158,11,0.15)',  color: '#f59e0b' },
+  'EFETIVADO':  { label: 'Efetivado',  bg: 'rgba(100,116,139,0.15)', color: '#64748b' },
+  'CANCELADO':  { label: 'Cancelado',  bg: 'rgba(239,68,68,0.12)',   color: '#ef4444' },
+};
+
+function isAtivo(c: EneContrato) {
+  return (c.status === 'A EFETIVAR' || c.status === 'PARCIAL') && new Date(c.vencimento) >= new Date();
+}
+
+function ContratoTable({ rows, muted }: { rows: EneContrato[]; muted?: boolean }) {
+  const opacity = muted ? 0.65 : 1;
+  return (
+    <div style={{ overflowX: 'auto', opacity }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+        <thead>
+          <tr style={{ borderBottom: '1px solid var(--panel-border)' }}>
+            {['Pregão', 'AF / Lote', 'Fornecedor', 'Item', 'Contratado', 'Empenhado', 'Saldo', 'Vencimento', 'Situação'].map(h => (
+              <th key={h} style={{
+                padding: '10px 14px', textAlign: 'left',
+                color: 'var(--text-muted)', fontWeight: 600,
+                fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em',
+                whiteSpace: 'nowrap',
+              }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((c, i) => {
+            const pct = c.qtde_contratada > 0 ? (c.qtde_empenhada / c.qtde_contratada) * 100 : 0;
+            const saldoColor = c.saldo <= 0 ? '#ef4444' : c.saldo < c.qtde_contratada * 0.1 ? '#f59e0b' : '#10b981';
+            const venc = new Date(c.vencimento);
+            const daysLeft = Math.round((venc.getTime() - Date.now()) / 86400000);
+            const vencColor = muted ? 'var(--text-muted)' : daysLeft < 30 ? '#ef4444' : daysLeft < 90 ? '#f59e0b' : 'var(--text-muted)';
+            const st = STATUS_LABEL[c.status] ?? { label: c.status, bg: 'rgba(100,116,139,0.15)', color: '#64748b' };
+            return (
+              <tr key={i} style={{ borderBottom: '1px solid var(--panel-border)' }}>
+                <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: muted ? 'var(--text-muted)' : 'var(--primary)', fontWeight: 600 }}>
+                  {c.pregao}
+                </td>
+                <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                  {c.nro_af}/{c.cpto}
+                </td>
+                <td style={{ padding: '10px 14px', maxWidth: '220px' }}>
+                  <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: muted ? 'var(--text-muted)' : undefined }}>
+                    {c.fornecedor}
+                  </div>
+                </td>
+                <td style={{ padding: '10px 14px', color: 'var(--text-muted)', textAlign: 'center' }}>{c.item}</td>
+                <td style={{ padding: '10px 14px', textAlign: 'right', color: muted ? 'var(--text-muted)' : undefined }}>
+                  {c.qtde_contratada.toLocaleString('pt-BR')}
+                </td>
+                <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                  <div style={{ color: muted ? 'var(--text-muted)' : undefined }}>{c.qtde_empenhada.toLocaleString('pt-BR')}</div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{pct.toFixed(0)}%</div>
+                </td>
+                <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>
+                  <span style={{ color: muted ? 'var(--text-muted)' : saldoColor }}>{c.saldo.toLocaleString('pt-BR')}</span>
+                </td>
+                <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: vencColor }}>
+                  {venc.toLocaleDateString('pt-BR')}
+                  {!muted && daysLeft < 90 && daysLeft > 0 && (
+                    <div style={{ fontSize: '0.65rem' }}>{daysLeft}d restantes</div>
+                  )}
+                  {!muted && daysLeft <= 0 && (
+                    <div style={{ fontSize: '0.65rem', color: '#ef4444' }}>Vencido</div>
+                  )}
+                </td>
+                <td style={{ padding: '10px 14px' }}>
+                  <span style={{ background: st.bg, color: st.color, borderRadius: '6px', padding: '2px 8px', fontSize: '0.7rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {st.label}
+                  </span>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function EneTab({ contratos, umd }: { contratos: EneContrato[]; umd: string }) {
-  const totalContratado = contratos.reduce((s, c) => s + c.qtde_contratada, 0);
-  const totalEmpenhado  = contratos.reduce((s, c) => s + c.qtde_empenhada,  0);
-  const totalSaldo      = contratos.reduce((s, c) => s + c.saldo, 0);
+  const [showHistorico, setShowHistorico] = useState(false);
+
+  const ativos     = contratos.filter(c => isAtivo(c));
+  const historico  = contratos.filter(c => !isAtivo(c));
+
+  const totalContratadoAtivo = ativos.reduce((s, c) => s + c.qtde_contratada, 0);
+  const totalEmpenhadoAtivo  = ativos.reduce((s, c) => s + c.qtde_empenhada,  0);
+  const totalSaldoAtivo      = ativos.reduce((s, c) => s + c.saldo, 0);
 
   if (contratos.length === 0) {
     return (
       <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
-        <FileText size={36} style={{ opacity: 0.3, marginBottom: '12px', display: 'block', margin: '0 auto 12px' }} />
-        Nenhum contrato ENE ativo para este material
+        <FileText size={36} style={{ opacity: 0.3, display: 'block', margin: '0 auto 12px' }} />
+        Nenhum contrato ENE encontrado para este material
       </div>
     );
   }
 
   return (
     <>
-      {/* ENE KPIs */}
+      {/* KPIs — baseados nos contratos ativos */}
       <div className="kpi-grid">
         <div className="glass-panel kpi-card" style={{ borderTop: '2px solid var(--primary)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span className="kpi-title">Saldo Total ENE</span>
+            <span className="kpi-title">Saldo Total (Ativos)</span>
             <FileText size={20} color="var(--primary)" />
           </div>
-          <div className="kpi-value" style={{ color: totalSaldo <= 0 ? '#ef4444' : 'var(--primary)' }}>
-            {totalSaldo.toLocaleString('pt-BR')} {umd}
+          <div className="kpi-value" style={{ color: totalSaldoAtivo <= 0 ? '#ef4444' : 'var(--primary)' }}>
+            {totalSaldoAtivo.toLocaleString('pt-BR')} {umd}
           </div>
         </div>
         <div className="glass-panel kpi-card" style={{ borderTop: '2px solid #10b981' }}>
@@ -364,7 +452,7 @@ function EneTab({ contratos, umd }: { contratos: EneContrato[]; umd: string }) {
             <Package size={20} color="#10b981" />
           </div>
           <div className="kpi-value" style={{ color: '#10b981' }}>
-            {totalContratado.toLocaleString('pt-BR')} {umd}
+            {totalContratadoAtivo.toLocaleString('pt-BR')} {umd}
           </div>
         </div>
         <div className="glass-panel kpi-card" style={{ borderTop: '2px solid #f59e0b' }}>
@@ -373,7 +461,7 @@ function EneTab({ contratos, umd }: { contratos: EneContrato[]; umd: string }) {
             <TrendingUp size={20} color="#f59e0b" />
           </div>
           <div className="kpi-value" style={{ color: '#f59e0b' }}>
-            {totalEmpenhado.toLocaleString('pt-BR')} {umd}
+            {totalEmpenhadoAtivo.toLocaleString('pt-BR')} {umd}
           </div>
         </div>
         <div className="glass-panel kpi-card" style={{ borderTop: '2px solid var(--secondary)' }}>
@@ -382,83 +470,54 @@ function EneTab({ contratos, umd }: { contratos: EneContrato[]; umd: string }) {
             <Calendar size={20} color="var(--secondary)" />
           </div>
           <div className="kpi-value" style={{ fontSize: '1.4rem', color: 'var(--secondary)' }}>
-            {contratos.length}
+            {ativos.length}
+            {historico.length > 0 && (
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '6px' }}>
+                + {historico.length} histórico
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Contracts table */}
-      <div className="glass-panel" style={{ overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--panel-border)' }}>
-                {['Pregão', 'AF / Lote', 'Fornecedor', 'Item', 'Contratado', 'Empenhado', 'Saldo', 'Vencimento', 'Situação'].map(h => (
-                  <th key={h} style={{
-                    padding: '12px 14px', textAlign: 'left',
-                    color: 'var(--text-muted)', fontWeight: 600,
-                    fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em',
-                    whiteSpace: 'nowrap',
-                  }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {contratos.map((c, i) => {
-                const pct = c.qtde_contratada > 0 ? (c.qtde_empenhada / c.qtde_contratada) * 100 : 0;
-                const saldoColor = c.saldo <= 0 ? '#ef4444' : c.saldo < c.qtde_contratada * 0.1 ? '#f59e0b' : '#10b981';
-                const venc = new Date(c.vencimento);
-                const daysLeft = Math.round((venc.getTime() - Date.now()) / 86400000);
-                const vencColor = daysLeft < 30 ? '#ef4444' : daysLeft < 90 ? '#f59e0b' : 'var(--text-muted)';
-                return (
-                  <tr key={i} style={{ borderBottom: '1px solid var(--panel-border)' }}>
-                    <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: 'var(--primary)', fontWeight: 600 }}>
-                      {c.pregao}
-                    </td>
-                    <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                      {c.nro_af}/{c.cpto}
-                    </td>
-                    <td style={{ padding: '10px 14px', maxWidth: '220px' }}>
-                      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {c.fornecedor}
-                      </div>
-                    </td>
-                    <td style={{ padding: '10px 14px', color: 'var(--text-muted)', textAlign: 'center' }}>
-                      {c.item}
-                    </td>
-                    <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                      {c.qtde_contratada.toLocaleString('pt-BR')}
-                    </td>
-                    <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                      <div>{c.qtde_empenhada.toLocaleString('pt-BR')}</div>
-                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{pct.toFixed(0)}%</div>
-                    </td>
-                    <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>
-                      <span style={{ color: saldoColor }}>{c.saldo.toLocaleString('pt-BR')}</span>
-                    </td>
-                    <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: vencColor }}>
-                      {venc.toLocaleDateString('pt-BR')}
-                      {daysLeft < 90 && (
-                        <div style={{ fontSize: '0.65rem' }}>{daysLeft}d restantes</div>
-                      )}
-                    </td>
-                    <td style={{ padding: '10px 14px' }}>
-                      <span style={{
-                        background: c.status === 'A EFETIVAR' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)',
-                        color:      c.status === 'A EFETIVAR' ? '#10b981'                : '#f59e0b',
-                        borderRadius: '6px', padding: '2px 8px', fontSize: '0.7rem', fontWeight: 600,
-                        whiteSpace: 'nowrap',
-                      }}>
-                        {c.status === 'A EFETIVAR' ? 'Ativo' : 'Parcial'}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {/* Contratos Ativos */}
+      {ativos.length > 0 ? (
+        <div className="glass-panel" style={{ overflow: 'hidden' }}>
+          <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--panel-border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#10b981' }}>
+              Contratos Ativos
+            </span>
+          </div>
+          <ContratoTable rows={ativos} />
         </div>
-      </div>
+      ) : (
+        <div className="glass-panel" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+          Nenhum contrato ativo no momento
+        </div>
+      )}
+
+      {/* Histórico */}
+      {historico.length > 0 && (
+        <div className="glass-panel" style={{ overflow: 'hidden' }}>
+          <button
+            onClick={() => setShowHistorico(v => !v)}
+            style={{
+              width: '100%', padding: '14px 16px', background: 'none', border: 'none',
+              borderBottom: showHistorico ? '1px solid var(--panel-border)' : 'none',
+              display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer',
+              color: 'var(--text-muted)',
+            }}
+          >
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#64748b', display: 'inline-block' }} />
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Histórico — {historico.length} contrato{historico.length !== 1 ? 's' : ''} (efetivados / cancelados / vencidos)
+            </span>
+            <span style={{ marginLeft: 'auto', fontSize: '0.8rem' }}>{showHistorico ? '▲' : '▼'}</span>
+          </button>
+          {showHistorico && <ContratoTable rows={historico} muted />}
+        </div>
+      )}
     </>
   );
 }
