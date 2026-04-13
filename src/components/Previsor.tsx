@@ -39,14 +39,11 @@ export const Previsor: React.FC<Props> = ({ almox }) => {
         const totalPages = Math.ceil(first.total / 200);
         let allMateriais = [...first.data];
 
-        if (totalPages > 1) {
-          const rest = await Promise.all(
-            Array.from({ length: totalPages - 1 }, (_, i) =>
-              api.materiais({ almox, limit: 200, page: i + 2 })
-            )
-          );
+        // Fetch remaining pages sequentially to avoid overwhelming the backend
+        for (let p = 2; p <= totalPages; p++) {
           if (cancelled) return;
-          allMateriais = allMateriais.concat(rest.flatMap(r => r.data));
+          const result = await api.materiais({ almox, limit: 200, page: p });
+          allMateriais = allMateriais.concat(result.data);
         }
 
         const withRuptura = allMateriais
