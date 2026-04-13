@@ -479,28 +479,231 @@ function ContratoMonitorModal({
   );
 }
 
+// ── Detalhe completo do contrato ──────────────────────────────────────────────
+function ContratoDetalheModal({ contrato, umd, matCodigo, matNome, onClose, onMonitorChange }: {
+  contrato: EneContrato;
+  umd: string;
+  matCodigo?: number;
+  matNome?: string;
+  onClose: () => void;
+  onMonitorChange?: () => void;
+}) {
+  const [showMonitor, setShowMonitor] = useState(false);
+  const venc     = new Date(contrato.vencimento);
+  const daysLeft = Math.round((venc.getTime() - Date.now()) / 86400000);
+  const pct      = contrato.qtde_contratada > 0 ? (contrato.qtde_empenhada / contrato.qtde_contratada) * 100 : 0;
+  const saldoPct = contrato.qtde_contratada > 0 ? (contrato.saldo / contrato.qtde_contratada) * 100 : 0;
+  const saldoColor  = contrato.saldo <= 0 ? '#ef4444' : contrato.saldo < contrato.qtde_contratada * 0.1 ? '#f59e0b' : '#10b981';
+  const vencColor   = daysLeft < 0 ? '#64748b' : daysLeft < 30 ? '#ef4444' : daysLeft < 90 ? '#f59e0b' : '#10b981';
+  const st          = STATUS_LABEL[contrato.status] ?? { label: contrato.status, bg: 'rgba(100,116,139,0.15)', color: '#64748b' };
+  const isMonitored = contrato.monitorado != null;
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [onClose]);
+
+  const field = (label: string, value: React.ReactNode) => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+      <span style={{ fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', fontWeight: 600 }}>{label}</span>
+      <span style={{ fontSize: '0.9rem', color: 'var(--text-main)' }}>{value}</span>
+    </div>
+  );
+
+  return (
+    <>
+      {showMonitor && matCodigo && matNome && (
+        <ContratoMonitorModal
+          contrato={contrato}
+          matCodigo={matCodigo}
+          matNome={matNome}
+          currentLevelId={contrato.monitorado ?? null}
+          onClose={() => setShowMonitor(false)}
+          onSave={() => { onMonitorChange?.(); setShowMonitor(false); onClose(); }}
+        />
+      )}
+      <div
+        onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+        style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 2000, padding: '16px',
+        }}
+      >
+        <div style={{
+          background: 'var(--panel-bg)', border: '1px solid var(--panel-border)',
+          borderRadius: '16px', width: '100%', maxWidth: '600px',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.5)', overflow: 'hidden',
+          maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: '20px 24px', borderBottom: '1px solid var(--panel-border)',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px',
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                <span style={{ fontFamily: 'monospace', fontSize: '1.1rem', fontWeight: 700, color: 'var(--primary)' }}>
+                  Pregão {contrato.pregao}
+                </span>
+                <span style={{ background: st.bg, color: st.color, borderRadius: '6px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: 700 }}>
+                  {st.label}
+                </span>
+                {isMonitored && (
+                  <span style={{ background: 'rgba(99,102,241,0.15)', color: '#6366f1', borderRadius: '6px', padding: '2px 10px', fontSize: '0.72rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Bell size={11} /> Monitorado
+                  </span>
+                )}
+              </div>
+              <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.82rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {contrato.fornecedor}
+              </p>
+            </div>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px', flexShrink: 0 }}>
+              <X size={18} />
+            </button>
+          </div>
+
+          {/* Body */}
+          <div style={{ padding: '24px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+            {/* Identificação */}
+            <div>
+              <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '12px' }}>
+                Identificação
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '14px' }}>
+                {field('Fornecedor', <span style={{ fontWeight: 600 }}>{contrato.fornecedor}</span>)}
+                {field('AF / Lote', <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--primary)' }}>{contrato.nro_af} / {contrato.cpto}</span>)}
+                {field('Item no Pregão', <span style={{ fontFamily: 'monospace' }}>{contrato.item}</span>)}
+                {field('Situação', <span style={{ background: st.bg, color: st.color, borderRadius: '6px', padding: '2px 8px', fontSize: '0.78rem', fontWeight: 600 }}>{st.label}</span>)}
+              </div>
+            </div>
+
+            <div style={{ height: '1px', background: 'var(--panel-border)' }} />
+
+            {/* Quantidades */}
+            <div>
+              <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '12px' }}>
+                Quantidades — {umd}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '14px' }}>
+                {field('Contratado', <span style={{ fontWeight: 700, fontSize: '1rem' }}>{contrato.qtde_contratada.toLocaleString('pt-BR')}</span>)}
+                {field('Empenhado', <span style={{ fontWeight: 700, fontSize: '1rem', color: '#f59e0b' }}>{contrato.qtde_empenhada.toLocaleString('pt-BR')}</span>)}
+                {field('Saldo', <span style={{ fontWeight: 700, fontSize: '1rem', color: saldoColor }}>{contrato.saldo.toLocaleString('pt-BR')}</span>)}
+              </div>
+              {/* Progress bars */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    <span>Empenhado</span><span>{pct.toFixed(1)}%</span>
+                  </div>
+                  <div style={{ height: '6px', borderRadius: '3px', background: 'var(--panel-highlight)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.min(100, pct)}%`, background: '#f59e0b', borderRadius: '3px', transition: 'width 0.4s' }} />
+                  </div>
+                </div>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '4px' }}>
+                    <span>Saldo disponível</span><span>{saldoPct.toFixed(1)}%</span>
+                  </div>
+                  <div style={{ height: '6px', borderRadius: '3px', background: 'var(--panel-highlight)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${Math.min(100, Math.max(0, saldoPct))}%`, background: saldoColor, borderRadius: '3px', transition: 'width 0.4s' }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: '1px', background: 'var(--panel-border)' }} />
+
+            {/* Vencimento */}
+            <div>
+              <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '12px' }}>
+                Vencimento
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: vencColor, fontFamily: 'monospace' }}>
+                  {venc.toLocaleDateString('pt-BR')}
+                </div>
+                <div style={{
+                  background: `${vencColor}18`, border: `1px solid ${vencColor}44`,
+                  borderRadius: '8px', padding: '6px 14px', fontSize: '0.82rem', fontWeight: 600, color: vencColor,
+                }}>
+                  {daysLeft < 0
+                    ? `Vencido há ${Math.abs(daysLeft)} dias`
+                    : daysLeft === 0
+                    ? 'Vence hoje'
+                    : `${daysLeft} dias restantes`}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div style={{ padding: '16px 24px', borderTop: '1px solid var(--panel-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {matCodigo && (
+              <button
+                onClick={() => setShowMonitor(true)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 16px', borderRadius: '8px', fontSize: '0.82rem', fontWeight: 600,
+                  border: `1px solid ${isMonitored ? '#6366f1' : 'var(--panel-border)'}`,
+                  background: isMonitored ? 'rgba(99,102,241,0.1)' : 'transparent',
+                  color: isMonitored ? '#6366f1' : 'var(--text-muted)', cursor: 'pointer',
+                }}
+              >
+                <Bell size={14} fill={isMonitored ? 'currentColor' : 'none'} />
+                {isMonitored ? 'Monitoramento ativo' : 'Monitorar contrato'}
+              </button>
+            )}
+            <button onClick={onClose} style={{
+              marginLeft: 'auto', padding: '8px 20px', borderRadius: '8px', fontSize: '0.875rem',
+              border: '1px solid var(--panel-border)', background: 'transparent',
+              color: 'var(--text-muted)', cursor: 'pointer',
+            }}>
+              Fechar
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function ContratoTable({
-  rows, muted, matCodigo, matNome, onMonitorChange,
+  rows, muted, matCodigo, matNome, umd, onMonitorChange,
 }: {
   rows: EneContrato[];
   muted?: boolean;
   matCodigo?: number;
   matNome?: string;
+  umd?: string;
   onMonitorChange?: () => void;
 }) {
-  const [modalContrato, setModalContrato] = useState<EneContrato | null>(null);
+  const [monitorContrato, setMonitorContrato] = useState<EneContrato | null>(null);
+  const [detalheContrato, setDetalheContrato] = useState<EneContrato | null>(null);
   const opacity = muted ? 0.65 : 1;
 
   return (
     <>
-      {modalContrato && matCodigo && matNome && (
+      {monitorContrato && matCodigo && matNome && (
         <ContratoMonitorModal
-          contrato={modalContrato}
+          contrato={monitorContrato}
           matCodigo={matCodigo}
           matNome={matNome}
-          currentLevelId={modalContrato.monitorado ?? null}
-          onClose={() => setModalContrato(null)}
-          onSave={() => { onMonitorChange?.(); setModalContrato(null); }}
+          currentLevelId={monitorContrato.monitorado ?? null}
+          onClose={() => setMonitorContrato(null)}
+          onSave={() => { onMonitorChange?.(); setMonitorContrato(null); }}
+        />
+      )}
+      {detalheContrato && (
+        <ContratoDetalheModal
+          contrato={detalheContrato}
+          umd={umd ?? ''}
+          matCodigo={matCodigo}
+          matNome={matNome}
+          onClose={() => setDetalheContrato(null)}
+          onMonitorChange={onMonitorChange}
         />
       )}
       <div style={{ overflowX: 'auto', opacity }}>
@@ -527,11 +730,17 @@ function ContratoTable({
               const st = STATUS_LABEL[c.status] ?? { label: c.status, bg: 'rgba(100,116,139,0.15)', color: '#64748b' };
               const isMonitored = c.monitorado != null;
               return (
-                <tr key={i} style={{ borderBottom: '1px solid var(--panel-border)' }}>
+                <tr
+                  key={i}
+                  onClick={() => setDetalheContrato(c)}
+                  style={{ borderBottom: '1px solid var(--panel-border)', cursor: 'pointer', transition: 'background 0.12s' }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--panel-highlight)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                >
                   <td style={{ padding: '10px 8px 10px 14px', width: '32px' }}>
                     {!muted && matCodigo && (
                       <button
-                        onClick={() => setModalContrato(c)}
+                        onClick={e => { e.stopPropagation(); setMonitorContrato(c); }}
                         title={isMonitored ? 'Monitorado — clique para alterar' : 'Adicionar ao monitoramento'}
                         style={{
                           background: isMonitored ? 'rgba(99,102,241,0.15)' : 'transparent',
@@ -541,7 +750,7 @@ function ContratoTable({
                           display: 'flex', alignItems: 'center',
                         }}
                       >
-                        {isMonitored ? <Bell size={12} /> : <Bell size={12} />}
+                        <Bell size={12} fill={isMonitored ? 'currentColor' : 'none'} />
                       </button>
                     )}
                   </td>
