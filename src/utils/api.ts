@@ -157,4 +157,33 @@ export const api = {
   checkNow: (mat_codigo: number, almox = 1): Promise<{ estoque: number; triggered: boolean }> =>
     fetch(`${BASE}/api/monitoramento/itens/${mat_codigo}/check-now?almox=${almox}`, { method: 'POST' })
       .then(r => handleResponse<{ estoque: number; triggered: boolean }>(r)),
+
+  statsSnapshot: (almox = 1): Promise<{ ok: boolean }> =>
+    fetch(`${BASE}/api/monitoramento/stats/snapshot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ almox }),
+    }).then(r => handleResponse<{ ok: boolean }>(r)),
+
+  statsHistorico: (almox = 1, dias = 30): Promise<{ dia: string; total_materiais: number; critico: number; baixo: number; atencao: number; normal: number }[]> =>
+    fetch(`${BASE}/api/monitoramento/stats/historico?almox=${almox}&dias=${dias}`)
+      .then(r => handleResponse(r)),
+
+  registrarAcesso: (mat_codigo: number, mat_nome: string, almox = 1): Promise<{ ok: boolean }> =>
+    fetch(`${BASE}/api/monitoramento/acesso`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mat_codigo, mat_nome, almox }),
+    }).then(r => handleResponse<{ ok: boolean }>(r)),
+
+  registrarBusca: (termo: string, almox = 1, resultados?: number): Promise<{ ok: boolean }> =>
+    fetch(`${BASE}/api/monitoramento/busca`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ termo, almox, resultados }),
+    }).then(r => handleResponse<{ ok: boolean }>(r)),
+
+  recorrentes: (almox = 1, limit = 20): Promise<{ itens: { mat_codigo: number; mat_nome: string; total_acessos: number; ultimo_acesso: string }[]; buscas: { termo: string; total_buscas: number; ultima_busca: string }[] }> =>
+    fetch(`${BASE}/api/monitoramento/recorrentes?almox=${almox}&limit=${limit}`)
+      .then(r => handleResponse(r)),
 };

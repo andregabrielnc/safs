@@ -43,6 +43,8 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
       ]);
       setDetalhe(d);
       setConsumo(c);
+      // Registra acesso para histórico de itens recorrentes (fire-and-forget)
+      api.registrarAcesso(d.codigo, d.nome, almox).catch(() => {});
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao carregar material');
     } finally {

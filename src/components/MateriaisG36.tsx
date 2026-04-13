@@ -59,15 +59,18 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
 
   useEffect(() => { refreshMonitored(); }, [refreshMonitored]);
 
-  // Debounce search — reset to page 1
+  // Debounce search — reset to page 1 and register search log
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       setPage(1);
       setDebouncedSearch(search);
+      if (search.trim().length >= 2) {
+        api.registrarBusca(search.trim(), almox).catch(() => {});
+      }
     }, 400);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [search]);
+  }, [search, almox]);
 
   // Reset to page 1 when alert filter changes
   useEffect(() => {
