@@ -145,9 +145,6 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
   const filtered = data?.data ?? [];
   const totalPages = data ? Math.ceil(data.total / LIMIT) : 1;
 
-  // ── KPI card click toggles filter ────────────────────────────────────────────
-  const handleCardClick = (f: AlertFilter) => setAlertFilter(prev => prev === f ? 'todos' : f);
-
   return (
     <>
       <style>{`
@@ -170,7 +167,7 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
               {data ? `${data.total.toLocaleString('pt-BR')} materiais` : 'Carregando...'}
               {alertFilter !== 'todos' && (
                 <span style={{ marginLeft: '6px', color: FILTER_META[alertFilter].color, fontWeight: 600 }}>
-                  · Filtro: {FILTER_META[alertFilter].label}
+                  · {FILTER_META[alertFilter].label}
                 </span>
               )}
             </p>
@@ -184,63 +181,42 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
           </button>
         </div>
 
-        {/* ── KPI Cards — clicáveis para filtrar ─────────────────────────────── */}
-        <div className="kpi-grid">
-          {(['critico', 'baixo', 'atencao', 'normal'] as const).map(f => {
-            const meta = FILTER_META[f];
-            const count = stats ? stats[f] : null;
-            const isActive = alertFilter === f;
-            const icons = { critico: AlertTriangle, baixo: TrendingDown, atencao: Clock, normal: Package };
-            const Icon = icons[f];
+        {/* ── KPI Cards — informativos ─────────────────────────────────────────── */}
+        <div className="no-print" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          {([
+            { key: 'critico', label: 'Crítico',  color: '#ef4444', icon: AlertTriangle },
+            { key: 'baixo',   label: 'Baixo',    color: '#f97316', icon: TrendingDown  },
+            { key: 'atencao', label: 'Atenção',  color: '#f59e0b', icon: Clock         },
+            { key: 'normal',  label: 'Normal',   color: '#10b981', icon: Package       },
+            ...(alertFilter === 'critico' ? [
+              { key: '_r15',  label: '≤ 15 dias',   color: '#ef4444', icon: AlertTriangle, value: ruptura === null ? '…' : String(rupturaUrgente.length)  },
+              { key: '_r30',  label: '16–30 dias',  color: '#f97316', icon: Clock,         value: ruptura === null ? '…' : String(rupturaAtencao.length)  },
+              { key: '_r90',  label: '31–90 dias',  color: '#f59e0b', icon: TrendingDown,  value: ruptura === null ? '…' : String(rupturaModerate.length) },
+            ] : []),
+          ] as { key: string; label: string; color: string; icon: React.ElementType; value?: string }[]).map(({ key, label, color, icon: Icon, value }) => {
+            const count = value ?? (stats ? String((stats as unknown as Record<string, number>)[key] ?? '—') : '—');
+            const isRuptura = key.startsWith('_r');
             return (
-              <button
-                key={f}
-                onClick={() => handleCardClick(f)}
-                className="glass-panel kpi-card no-print"
-                style={{
-                  borderTop: `2px solid ${meta.color}`,
-                  cursor: 'pointer', textAlign: 'left', background: 'none',
-                  outline: isActive ? `2px solid ${meta.color}` : 'none',
-                  outlineOffset: '2px',
-                  transition: 'outline 0.15s, box-shadow 0.15s',
-                  boxShadow: isActive ? `0 0 0 3px ${meta.color}22` : undefined,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <span className="kpi-title">{meta.label}</span>
-                  <Icon size={20} color={meta.color} />
-                </div>
-                <div className="kpi-value" style={{ color: meta.color }}>
-                  {count !== null ? count.toLocaleString('pt-BR') : '—'}
-                </div>
-                {isActive && (
-                  <div style={{ fontSize: '0.7rem', color: meta.color, marginTop: '4px', fontWeight: 600 }}>
-                    Filtro ativo · clique para limpar
+              <div key={key} style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '8px 14px',
+                background: 'var(--panel-highlight)',
+                border: `1px solid ${color}33`,
+                borderLeft: `3px solid ${color}`,
+                borderRadius: '8px',
+                minWidth: '110px',
+              }}>
+                <Icon size={14} color={color} style={{ flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', lineHeight: 1.2 }}>
+                    {isRuptura ? `Esgota ${label}` : label}
                   </div>
-                )}
-              </button>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color, lineHeight: 1.2 }}>{count}</div>
+                </div>
+              </div>
             );
           })}
         </div>
-
-        {/* ── Sub-cards de ruptura (visível apenas no filtro Crítico) ─────────── */}
-        {alertFilter === 'critico' && (
-          <div className="kpi-grid no-print" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-            {[
-              { label: 'Esgota em ≤ 15 dias',  count: ruptura === null ? '…' : rupturaUrgente.length,  color: '#ef4444', icon: AlertTriangle },
-              { label: 'Esgota em 16–30 dias', count: ruptura === null ? '…' : rupturaAtencao.length,  color: '#f97316', icon: Clock },
-              { label: 'Esgota em 31–90 dias', count: ruptura === null ? '…' : rupturaModerate.length, color: '#f59e0b', icon: TrendingDown },
-            ].map(({ label, count, color, icon: Icon }) => (
-              <div key={label} className="glass-panel kpi-card" style={{ borderTop: `2px solid ${color}` }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <span className="kpi-title">{label}</span>
-                  <Icon size={18} color={color} />
-                </div>
-                <div className="kpi-value" style={{ color }}>{count}</div>
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* ── Search + Filter + Export ─────────────────────────────────────────── */}
         <div className="no-print" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
