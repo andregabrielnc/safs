@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { ArrowLeft, Package, TrendingUp, AlertTriangle, Calendar, FileText, Bell, BellOff, X } from 'lucide-react';
+import { ArrowLeft, Package, TrendingUp, AlertTriangle, Calendar, FileText, Bell, BellOff, X, Search } from 'lucide-react';
 import { Line } from '@ant-design/plots';
 import { api } from '../utils/api';
 import type { ConsumoMensal, MaterialDetalhe, EneContrato, MonitoringLevel } from '../utils/api';
@@ -599,14 +599,40 @@ function EneTab({ contratos, umd, matCodigo, matNome, onMonitorChange }: {
   onMonitorChange: () => void;
 }) {
   const [showHistorico, setShowHistorico] = useState(false);
+  const [search, setSearch]   = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo,   setDateTo]   = useState('');
 
-  const ativos     = contratos.filter(c => isAtivo(c));
-  const historico  = contratos.filter(c => !isAtivo(c));
+  const ativos    = contratos.filter(c => isAtivo(c));
+  const historico = contratos.filter(c => !isAtivo(c));
 
-  const totalContratadoAtivo = ativos.reduce((s, c) => s + c.qtde_contratada, 0);
-  const totalEmpenhadoAtivo  = ativos.reduce((s, c) => s + c.qtde_empenhada,  0);
-  const totalSaldoAtivo      = ativos.reduce((s, c) => s + c.saldo, 0);
+  // Apply search + date range to ativos only
+  const ativosFiltered = ativos.filter(c => {
+    if (search) {
+      const q = search.toLowerCase();
+      const match =
+        c.pregao.toLowerCase().includes(q) ||
+        c.fornecedor.toLowerCase().includes(q) ||
+        String(c.nro_af).includes(q) ||
+        String(c.cpto).includes(q);
+      if (!match) return false;
+    }
+    if (dateFrom) {
+      const venc = new Date(c.vencimento);
+      if (venc < new Date(dateFrom)) return false;
+    }
+    if (dateTo) {
+      const venc = new Date(c.vencimento);
+      if (venc > new Date(dateTo + 'T23:59:59')) return false;
+    }
+    return true;
+  });
+
+  const totalContratadoAtivo = ativosFiltered.reduce((s, c) => s + c.qtde_contratada, 0);
+  const totalEmpenhadoAtivo  = ativosFiltered.reduce((s, c) => s + c.qtde_empenhada,  0);
+  const totalSaldoAtivo      = ativosFiltered.reduce((s, c) => s + c.saldo, 0);
   const monitoradosCount     = contratos.filter(c => c.monitorado != null).length;
+  const hasFilter            = !!search || !!dateFrom || !!dateTo;
 
   if (contratos.length === 0) {
     return (
@@ -672,16 +698,87 @@ function EneTab({ contratos, umd, matCodigo, matNome, onMonitorChange }: {
       {/* Contratos Ativos */}
       {ativos.length > 0 ? (
         <div className="glass-panel" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '14px 16px 10px', borderBottom: '1px solid var(--panel-border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', display: 'inline-block' }} />
-            <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#10b981' }}>
+          {/* Header */}
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--panel-border)', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10b981', display: 'inline-block', flexShrink: 0 }} />
+            <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#10b981', marginRight: '4px' }}>
               Contratos Ativos
             </span>
-            <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-              Clique no sino para monitorar
-            </span>
+
+            {/* Search */}
+            <div style={{ position: 'relative', flex: '1 1 180px', minWidth: '160px' }}>
+              <Search size={13} style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
+              <input
+                type="text"
+                placeholder="Pregão, fornecedor, AF…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{
+                  width: '100%', padding: '6px 10px 6px 28px',
+                  background: 'var(--panel-highlight)', border: '1px solid var(--panel-border)',
+                  borderRadius: '7px', color: 'var(--text-main)', fontSize: '0.78rem',
+                  outline: 'none',
+                }}
+              />
+            </div>
+
+            {/* Date range */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Vencimento</span>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={e => setDateFrom(e.target.value)}
+                style={{
+                  padding: '5px 8px', background: 'var(--panel-highlight)',
+                  border: '1px solid var(--panel-border)', borderRadius: '7px',
+                  color: 'var(--text-main)', fontSize: '0.78rem', outline: 'none', cursor: 'pointer',
+                }}
+              />
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>até</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={e => setDateTo(e.target.value)}
+                style={{
+                  padding: '5px 8px', background: 'var(--panel-highlight)',
+                  border: '1px solid var(--panel-border)', borderRadius: '7px',
+                  color: 'var(--text-main)', fontSize: '0.78rem', outline: 'none', cursor: 'pointer',
+                }}
+              />
+              {hasFilter && (
+                <button
+                  onClick={() => { setSearch(''); setDateFrom(''); setDateTo(''); }}
+                  title="Limpar filtros"
+                  style={{
+                    background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--text-muted)', padding: '4px', display: 'flex', alignItems: 'center',
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+
+            {hasFilter && (
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+                {ativosFiltered.length} / {ativos.length}
+              </span>
+            )}
+            {!hasFilter && (
+              <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                Clique no sino para monitorar
+              </span>
+            )}
           </div>
-          <ContratoTable rows={ativos} matCodigo={matCodigo} matNome={matNome} onMonitorChange={onMonitorChange} />
+
+          {ativosFiltered.length > 0 ? (
+            <ContratoTable rows={ativosFiltered} matCodigo={matCodigo} matNome={matNome} onMonitorChange={onMonitorChange} />
+          ) : (
+            <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+              Nenhum contrato corresponde ao filtro
+            </div>
+          )}
         </div>
       ) : (
         <div className="glass-panel" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
