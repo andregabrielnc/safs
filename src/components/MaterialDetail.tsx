@@ -757,7 +757,99 @@ function ContratoTable({
 }) {
   const [monitorContrato, setMonitorContrato] = useState<EneContrato | null>(null);
   const [detalheContrato, setDetalheContrato] = useState<EneContrato | null>(null);
+  const [expandedPregoes, setExpandedPregoes] = useState<Set<string>>(new Set());
   const opacity = muted ? 0.65 : 1;
+
+  // ── Agrupar por pregão ────────────────────────────────────────────────────
+  const grupos = Object.values(
+    rows.reduce<Record<string, { pregao: string; afs: EneContrato[] }>>((acc, c) => {
+      if (!acc[c.pregao]) acc[c.pregao] = { pregao: c.pregao, afs: [] };
+      acc[c.pregao].afs.push(c);
+      return acc;
+    }, {})
+  );
+
+  const togglePregao = (pregao: string) =>
+    setExpandedPregoes(prev => {
+      const next = new Set(prev);
+      next.has(pregao) ? next.delete(pregao) : next.add(pregao);
+      return next;
+    });
+
+  const renderAfRow = (c: EneContrato, i: number, indented = false) => {
+    const pct = c.qtde_contratada > 0 ? (c.qtde_empenhada / c.qtde_contratada) * 100 : 0;
+    const saldoColor = c.saldo <= 0 ? '#ef4444' : c.saldo < c.qtde_contratada * 0.1 ? '#f59e0b' : '#10b981';
+    const venc = new Date(c.vencimento);
+    const daysLeft = Math.round((venc.getTime() - Date.now()) / 86400000);
+    const vencColor = muted ? 'var(--text-muted)' : daysLeft < 30 ? '#ef4444' : daysLeft < 90 ? '#f59e0b' : 'var(--text-muted)';
+    const st = STATUS_LABEL[c.status] ?? { label: c.status, bg: 'rgba(100,116,139,0.15)', color: '#64748b' };
+    const isMonitored = c.monitorado != null;
+    return (
+      <tr
+        key={`af-${i}`}
+        onClick={() => setDetalheContrato(c)}
+        style={{
+          borderBottom: '1px solid var(--panel-border)', cursor: 'pointer',
+          transition: 'background 0.12s',
+          background: indented ? 'var(--panel-highlight)' : undefined,
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = indented ? 'var(--panel-bg)' : 'var(--panel-highlight)')}
+        onMouseLeave={e => (e.currentTarget.style.background = indented ? 'var(--panel-highlight)' : 'transparent')}
+      >
+        <td style={{ padding: '9px 8px 9px 14px', width: '32px' }}>
+          {!muted && matCodigo && (
+            <button
+              onClick={e => { e.stopPropagation(); setMonitorContrato(c); }}
+              title={isMonitored ? 'Monitorado — clique para alterar' : 'Adicionar ao monitoramento'}
+              style={{
+                background: isMonitored ? 'rgba(99,102,241,0.15)' : 'transparent',
+                border: `1px solid ${isMonitored ? '#6366f1' : 'var(--panel-border)'}`,
+                borderRadius: '6px', padding: '4px 6px', cursor: 'pointer',
+                color: isMonitored ? '#6366f1' : 'var(--text-muted)',
+                display: 'flex', alignItems: 'center',
+              }}
+            >
+              <Bell size={12} fill={isMonitored ? 'currentColor' : 'none'} />
+            </button>
+          )}
+        </td>
+        <td style={{ padding: '9px 14px', paddingLeft: indented ? '28px' : '14px', fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+          {indented ? `AF ${c.nro_af}/${c.cpto}` : <span style={{ color: muted ? 'var(--text-muted)' : 'var(--primary)', fontWeight: 600 }}>{c.pregao}</span>}
+        </td>
+        {!indented && (
+          <td style={{ padding: '9px 14px', color: 'var(--text-muted)', fontFamily: 'monospace', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+            {c.nro_af}/{c.cpto}
+          </td>
+        )}
+        {indented && <td />}
+        <td style={{ padding: '9px 14px', maxWidth: '200px' }}>
+          <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: muted ? 'var(--text-muted)' : undefined, fontSize: indented ? '0.75rem' : undefined }}>
+            {indented ? <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>Item {c.item}</span> : c.fornecedor}
+          </div>
+        </td>
+        <td style={{ padding: '9px 14px', textAlign: 'right', color: muted ? 'var(--text-muted)' : undefined, fontSize: indented ? '0.75rem' : undefined }}>
+          {c.qtde_contratada.toLocaleString('pt-BR')}
+        </td>
+        <td style={{ padding: '9px 14px', textAlign: 'right', fontSize: indented ? '0.75rem' : undefined }}>
+          <div style={{ color: muted ? 'var(--text-muted)' : undefined }}>{c.qtde_empenhada.toLocaleString('pt-BR')}</div>
+          <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>{pct.toFixed(0)}%</div>
+        </td>
+        <td style={{ padding: '9px 14px', textAlign: 'right', fontWeight: 700, fontSize: indented ? '0.75rem' : undefined }}>
+          <span style={{ color: muted ? 'var(--text-muted)' : saldoColor }}>{c.saldo.toLocaleString('pt-BR')}</span>
+        </td>
+        <td style={{ padding: '9px 14px', whiteSpace: 'nowrap', color: vencColor, fontSize: indented ? '0.75rem' : undefined }}>
+          {venc.toLocaleDateString('pt-BR')}
+          {!muted && daysLeft < 90 && daysLeft > 0 && <div style={{ fontSize: '0.62rem' }}>{daysLeft}d</div>}
+          {!muted && daysLeft <= 0 && <div style={{ fontSize: '0.62rem', color: '#ef4444' }}>Vencido</div>}
+        </td>
+        <td style={{ padding: '9px 14px' }}>
+          <span style={{ background: st.bg, color: st.color, borderRadius: '6px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {st.label}
+          </span>
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <>
@@ -785,87 +877,112 @@ function ContratoTable({
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--panel-border)' }}>
-              {['', 'Pregão', 'AF / Lote', 'Fornecedor', 'Item', 'Contratado', 'Empenhado', 'Saldo', 'Vencimento', 'Situação'].map(h => (
+              {['', 'Pregão / AF', 'AF / Lote', 'Fornecedor', 'Contratado', 'Empenhado', 'Saldo', 'Vencimento', 'Situação'].map(h => (
                 <th key={h} style={{
-                  padding: '10px 14px', textAlign: 'left',
+                  padding: '10px 14px', textAlign: h === 'Contratado' || h === 'Empenhado' || h === 'Saldo' ? 'right' : 'left',
                   color: 'var(--text-muted)', fontWeight: 600,
-                  fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em',
-                  whiteSpace: 'nowrap',
+                  fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap',
                 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.map((c, i) => {
-              const pct = c.qtde_contratada > 0 ? (c.qtde_empenhada / c.qtde_contratada) * 100 : 0;
-              const saldoColor = c.saldo <= 0 ? '#ef4444' : c.saldo < c.qtde_contratada * 0.1 ? '#f59e0b' : '#10b981';
-              const venc = new Date(c.vencimento);
-              const daysLeft = Math.round((venc.getTime() - Date.now()) / 86400000);
+            {grupos.map(({ pregao, afs }) => {
+              const isExpanded = expandedPregoes.has(pregao);
+              const multiAF = afs.length > 1;
+              // Totais consolidados do pregão
+              const totalContratado = afs.reduce((s, c) => s + c.qtde_contratada, 0);
+              const totalEmpenhado  = afs.reduce((s, c) => s + c.qtde_empenhada, 0);
+              const totalSaldo      = afs.reduce((s, c) => s + c.saldo, 0);
+              const pct = totalContratado > 0 ? (totalEmpenhado / totalContratado) * 100 : 0;
+              const saldoColor = totalSaldo <= 0 ? '#ef4444' : totalSaldo < totalContratado * 0.1 ? '#f59e0b' : '#10b981';
+              // Vencimento mais próximo
+              const nearestVenc = afs.reduce((min, c) => {
+                const d = new Date(c.vencimento); return d < min ? d : min;
+              }, new Date(afs[0].vencimento));
+              const daysLeft = Math.round((nearestVenc.getTime() - Date.now()) / 86400000);
               const vencColor = muted ? 'var(--text-muted)' : daysLeft < 30 ? '#ef4444' : daysLeft < 90 ? '#f59e0b' : 'var(--text-muted)';
-              const st = STATUS_LABEL[c.status] ?? { label: c.status, bg: 'rgba(100,116,139,0.15)', color: '#64748b' };
-              const isMonitored = c.monitorado != null;
+              // Status mais crítico
+              const statusPriority = (s: string) => s === 'A EFETIVAR' ? 0 : s === 'PARCIAL' ? 1 : 2;
+              const mainAf = afs.slice().sort((a, b) => statusPriority(a.status) - statusPriority(b.status))[0];
+              const st = STATUS_LABEL[mainAf.status] ?? { label: mainAf.status, bg: 'rgba(100,116,139,0.15)', color: '#64748b' };
+              const anyMonitored = afs.some(c => c.monitorado != null);
+
               return (
-                <tr
-                  key={i}
-                  onClick={() => setDetalheContrato(c)}
-                  style={{ borderBottom: '1px solid var(--panel-border)', cursor: 'pointer', transition: 'background 0.12s' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--panel-highlight)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <td style={{ padding: '10px 8px 10px 14px', width: '32px' }}>
-                    {!muted && matCodigo && (
-                      <button
-                        onClick={e => { e.stopPropagation(); setMonitorContrato(c); }}
-                        title={isMonitored ? 'Monitorado — clique para alterar' : 'Adicionar ao monitoramento'}
-                        style={{
-                          background: isMonitored ? 'rgba(99,102,241,0.15)' : 'transparent',
-                          border: `1px solid ${isMonitored ? '#6366f1' : 'var(--panel-border)'}`,
-                          borderRadius: '6px', padding: '4px 6px', cursor: 'pointer',
-                          color: isMonitored ? '#6366f1' : 'var(--text-muted)',
-                          display: 'flex', alignItems: 'center',
-                        }}
-                      >
-                        <Bell size={12} fill={isMonitored ? 'currentColor' : 'none'} />
-                      </button>
-                    )}
-                  </td>
-                  <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: muted ? 'var(--text-muted)' : 'var(--primary)', fontWeight: 600 }}>
-                    {c.pregao}
-                  </td>
-                  <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                    {c.nro_af}/{c.cpto}
-                  </td>
-                  <td style={{ padding: '10px 14px', maxWidth: '220px' }}>
-                    <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: muted ? 'var(--text-muted)' : undefined }}>
-                      {c.fornecedor}
-                    </div>
-                  </td>
-                  <td style={{ padding: '10px 14px', color: 'var(--text-muted)', textAlign: 'center' }}>{c.item}</td>
-                  <td style={{ padding: '10px 14px', textAlign: 'right', color: muted ? 'var(--text-muted)' : undefined }}>
-                    {c.qtde_contratada.toLocaleString('pt-BR')}
-                  </td>
-                  <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                    <div style={{ color: muted ? 'var(--text-muted)' : undefined }}>{c.qtde_empenhada.toLocaleString('pt-BR')}</div>
-                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{pct.toFixed(0)}%</div>
-                  </td>
-                  <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>
-                    <span style={{ color: muted ? 'var(--text-muted)' : saldoColor }}>{c.saldo.toLocaleString('pt-BR')}</span>
-                  </td>
-                  <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: vencColor }}>
-                    {venc.toLocaleDateString('pt-BR')}
-                    {!muted && daysLeft < 90 && daysLeft > 0 && (
-                      <div style={{ fontSize: '0.65rem' }}>{daysLeft}d restantes</div>
-                    )}
-                    {!muted && daysLeft <= 0 && (
-                      <div style={{ fontSize: '0.65rem', color: '#ef4444' }}>Vencido</div>
-                    )}
-                  </td>
-                  <td style={{ padding: '10px 14px' }}>
-                    <span style={{ background: st.bg, color: st.color, borderRadius: '6px', padding: '2px 8px', fontSize: '0.7rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      {st.label}
-                    </span>
-                  </td>
-                </tr>
+                <React.Fragment key={pregao}>
+                  {/* ── Linha do pregão (consolidada) ─────────────────────── */}
+                  <tr
+                    onClick={() => multiAF ? togglePregao(pregao) : setDetalheContrato(mainAf)}
+                    style={{ borderBottom: '1px solid var(--panel-border)', cursor: 'pointer', transition: 'background 0.12s' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'var(--panel-highlight)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td style={{ padding: '11px 8px 11px 14px', width: '32px' }}>
+                      {!muted && matCodigo && !multiAF && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setMonitorContrato(mainAf); }}
+                          title={anyMonitored ? 'Monitorado — clique para alterar' : 'Adicionar ao monitoramento'}
+                          style={{
+                            background: anyMonitored ? 'rgba(99,102,241,0.15)' : 'transparent',
+                            border: `1px solid ${anyMonitored ? '#6366f1' : 'var(--panel-border)'}`,
+                            borderRadius: '6px', padding: '4px 6px', cursor: 'pointer',
+                            color: anyMonitored ? '#6366f1' : 'var(--text-muted)',
+                            display: 'flex', alignItems: 'center',
+                          }}
+                        >
+                          <Bell size={12} fill={anyMonitored ? 'currentColor' : 'none'} />
+                        </button>
+                      )}
+                      {multiAF && (
+                        <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.7rem' }}>
+                          {isExpanded ? '▾' : '▸'}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: '11px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 700, color: muted ? 'var(--text-muted)' : 'var(--primary)' }}>{pregao}</span>
+                        {multiAF && (
+                          <span style={{ fontSize: '0.65rem', background: 'var(--panel-highlight)', border: '1px solid var(--panel-border)', borderRadius: '4px', padding: '1px 5px', color: 'var(--text-muted)' }}>
+                            {afs.length} AFs
+                          </span>
+                        )}
+                      </div>
+                      {!multiAF && (
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', fontFamily: 'monospace', marginTop: '2px' }}>
+                          AF {mainAf.nro_af}/{mainAf.cpto} · Item {mainAf.item}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '11px 14px' }}>
+                      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px', color: muted ? 'var(--text-muted)' : undefined }}>
+                        {mainAf.fornecedor}
+                      </div>
+                    </td>
+                    <td style={{ padding: '11px 14px', textAlign: 'right', color: muted ? 'var(--text-muted)' : undefined }}>
+                      {totalContratado.toLocaleString('pt-BR')}
+                    </td>
+                    <td style={{ padding: '11px 14px', textAlign: 'right' }}>
+                      <div style={{ color: muted ? 'var(--text-muted)' : undefined }}>{totalEmpenhado.toLocaleString('pt-BR')}</div>
+                      <div style={{ fontSize: '0.62rem', color: 'var(--text-muted)' }}>{pct.toFixed(0)}%</div>
+                    </td>
+                    <td style={{ padding: '11px 14px', textAlign: 'right', fontWeight: 700 }}>
+                      <span style={{ color: muted ? 'var(--text-muted)' : saldoColor }}>{totalSaldo.toLocaleString('pt-BR')}</span>
+                    </td>
+                    <td style={{ padding: '11px 14px', whiteSpace: 'nowrap', color: vencColor }}>
+                      {nearestVenc.toLocaleDateString('pt-BR')}
+                      {!muted && daysLeft < 90 && daysLeft > 0 && <div style={{ fontSize: '0.62rem' }}>{daysLeft}d</div>}
+                      {!muted && daysLeft <= 0 && <div style={{ fontSize: '0.62rem', color: '#ef4444' }}>Vencido</div>}
+                    </td>
+                    <td style={{ padding: '11px 14px' }}>
+                      <span style={{ background: st.bg, color: st.color, borderRadius: '6px', padding: '2px 8px', fontSize: '0.68rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        {st.label}
+                      </span>
+                    </td>
+                  </tr>
+                  {/* ── AFs expandidas (só quando multiAF e expanded) ─────── */}
+                  {multiAF && isExpanded && afs.map((c, i) => renderAfRow(c, i, true))}
+                </React.Fragment>
               );
             })}
           </tbody>
