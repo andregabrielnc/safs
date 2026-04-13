@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Package, AlertTriangle, CheckCircle, Clock, Activity } from 'lucide-react';
-import { Pie, Column } from '@ant-design/plots';
+import { Pie } from '@ant-design/plots';
 import { api } from '../utils/api';
-import type { Stats, Material } from '../utils/api';
+import type { Stats, Material, MonitoredItem, MonitoredContract } from '../utils/api';
 import { KPICard } from './KPICard';
 import { AlertBadge } from './AlertBadge';
 
@@ -15,6 +15,8 @@ interface Props {
 export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate }) => {
   const [stats, setStats] = useState<Stats | null>(null);
   const [criticos, setCriticos] = useState<Material[]>([]);
+  const [itensMonitorados, setItensMonitorados] = useState<MonitoredItem[]>([]);
+  const [contratosMonitorados, setContratosMonitorados] = useState<MonitoredContract[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,12 +25,16 @@ export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate
       setLoading(true);
       setError(null);
       try {
-        const [s, mat] = await Promise.all([
+        const [s, mat, itens, contratos] = await Promise.all([
           api.stats(almox),
           api.materiais({ almox, limit: 60, page: 1 }),
+          api.itensMonitorados(),
+          api.eneMonitorados(),
         ]);
         setStats(s);
         setCriticos(mat.data.filter(m => m.alerta === 'critico' || m.alerta === 'baixo'));
+        setItensMonitorados(itens);
+        setContratosMonitorados(contratos);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Erro ao carregar dashboard');
       } finally {
@@ -57,10 +63,28 @@ export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate
     { type: 'Normal',  value: Number(stats.normal) },
   ].filter(d => d.value > 0) : [];
 
-  const barData = criticos.map(m => ({
-    nome: m.nome.length > 28 ? m.nome.slice(0, 28) + '…' : m.nome,
-    estoque: Number(m.estoque),
-  }));
+  // ── Itens Monitorados — agrupar por nível ────────────────────────────────
+  const itensPieData = Object.values(
+    itensMonitorados.reduce<Record<string, { type: string; value: number; color: string }>>((acc, item) => {
+      const key = item.level_nome;
+      if (!acc[key]) acc[key] = { type: key, value: 0, color: item.level_cor };
+      acc[key].value += 1;
+      return acc;
+    }, {})
+  );
+
+  // ── Contratos Monitorados — agrupar por alerta ───────────────────────────
+  const alertaLabel: Record<string, string> = { critico: 'Crítico', baixo: 'Baixo', atencao: 'Atenção', normal: 'Normal' };
+  const alertaColor: Record<string, string> = { critico: '#ef4444', baixo: '#f97316', atencao: '#f59e0b', normal: '#10b981' };
+  const contratosPieData = Object.values(
+    contratosMonitorados.reduce<Record<string, { type: string; value: number; color: string }>>((acc, c) => {
+      const key = c.alerta ?? 'normal';
+      const label = alertaLabel[key] ?? key;
+      if (!acc[label]) acc[label] = { type: label, value: 0, color: alertaColor[key] ?? '#94a3b8' };
+      acc[label].value += 1;
+      return acc;
+    }, {})
+  );
 
   const pieConfig = {
     data: pieData,
@@ -81,19 +105,26 @@ export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate
     },
   };
 
-  const barConfig = {
-    data: barData,
-    xField: 'nome',
-    yField: 'estoque',
-    style: { fill: '#ef444488' },
-    axis: {
-      x: { labelAutoRotate: true, labelFill: '#94a3b8' },
-      y: { labelFill: '#94a3b8' },
+  const makePieConfig = (data: { type: string; value: number; color: string }[]) => ({
+    data,
+    angleField: 'value',
+    colorField: 'type',
+    radius: 0.75,
+    innerRadius: 0.55,
+    label: {
+      text: (d: { type: string; value: number }) => `${d.type}\n${d.value}`,
+      style: { fill: '#94a3b8', fontSize: 11 },
+    },
+    scale: {
+      color: {
+        domain: data.map(d => d.type),
+        range: data.map(d => d.color),
+      },
     },
     tooltip: {
-      items: [{ field: 'estoque', name: 'Estoque', valueFormatter: (v: number) => v.toLocaleString('pt-BR') }],
+      items: [{ field: 'value', name: 'Itens' }],
     },
-  };
+  });
 
   return (
     <div className="content-area">
@@ -121,21 +152,43 @@ export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate
           </div>
         </div>
 
-        <div className="glass-panel" style={{ padding: '24px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <h3 style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Materiais em Alerta
-            </h3>
-            <button onClick={() => onNavigate('materiais')} style={{
-              background: 'none', border: '1px solid var(--panel-border)', borderRadius: '6px',
-              padding: '4px 10px', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.75rem',
-            }}>Ver todos →</button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Itens Monitorados */}
+          <div className="glass-panel" style={{ padding: '20px', flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Itens Monitorados
+              </h3>
+              <button onClick={() => onNavigate('monitorados')} style={{
+                background: 'none', border: '1px solid var(--panel-border)', borderRadius: '6px',
+                padding: '4px 10px', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.75rem',
+              }}>Ver →</button>
+            </div>
+            <div style={{ height: '120px' }}>
+              {itensPieData.length > 0
+                ? <Pie {...makePieConfig(itensPieData)} />
+                : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nenhum item monitorado</div>
+              }
+            </div>
           </div>
-          <div style={{ height: '280px' }}>
-            {barData.length > 0
-              ? <Column {...barConfig} />
-              : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>Sem dados</div>
-            }
+
+          {/* Contratos Monitorados */}
+          <div className="glass-panel" style={{ padding: '20px', flex: 1 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Contratos Monitorados
+              </h3>
+              <button onClick={() => onNavigate('monitorados')} style={{
+                background: 'none', border: '1px solid var(--panel-border)', borderRadius: '6px',
+                padding: '4px 10px', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.75rem',
+              }}>Ver →</button>
+            </div>
+            <div style={{ height: '120px' }}>
+              {contratosPieData.length > 0
+                ? <Pie {...makePieConfig(contratosPieData)} />
+                : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nenhum contrato monitorado</div>
+              }
+            </div>
           </div>
         </div>
       </div>
