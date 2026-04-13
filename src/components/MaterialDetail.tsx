@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { ArrowLeft, Package, TrendingUp, AlertTriangle, Calendar } from 'lucide-react';
+import { ArrowLeft, Package, TrendingUp, AlertTriangle, Calendar, FileText } from 'lucide-react';
 import { Line } from '@ant-design/plots';
 import { api } from '../utils/api';
-import type { ConsumoMensal, MaterialDetalhe } from '../utils/api';
+import type { ConsumoMensal, MaterialDetalhe, EneContrato } from '../utils/api';
 import { AlertBadge } from './AlertBadge';
 
 interface Props {
@@ -30,19 +30,23 @@ function linearRegression(data: { x: number; y: number }[]) {
 export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
   const [detalhe, setDetalhe] = useState<MaterialDetalhe | null>(null);
   const [consumo, setConsumo] = useState<ConsumoMensal[]>([]);
+  const [ene, setEne] = useState<EneContrato[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'geral' | 'ene'>('geral');
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [d, c] = await Promise.all([
+      const [d, c, e] = await Promise.all([
         api.material(codigo, almox),
         api.consumo(codigo, almox, 24),
+        api.eneContratos(codigo).catch(() => [] as EneContrato[]),
       ]);
       setDetalhe(d);
       setConsumo(c);
+      setEne(e);
       // Registra acesso para histórico de itens recorrentes (fire-and-forget)
       api.registrarAcesso(d.codigo, d.nome, almox).catch(() => {});
     } catch (err) {
@@ -212,6 +216,29 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--panel-border)', paddingBottom: '0' }}>
+        {([
+          { key: 'geral', label: 'Visão Geral' },
+          { key: 'ene',   label: `ENE / Contratos${ene.length > 0 ? ` (${ene.length})` : ''}` },
+        ] as { key: 'geral' | 'ene'; label: string }[]).map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            style={{
+              padding: '8px 18px', background: 'none', border: 'none',
+              borderBottom: activeTab === tab.key ? '2px solid var(--primary)' : '2px solid transparent',
+              color: activeTab === tab.key ? 'var(--primary)' : 'var(--text-muted)',
+              cursor: 'pointer', fontSize: '0.875rem', fontWeight: activeTab === tab.key ? 600 : 400,
+              marginBottom: '-1px', transition: 'color 0.15s',
+            }}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'geral' && <>
       {/* KPIs */}
       <div className="kpi-grid">
         <div className="glass-panel kpi-card" style={{ borderTop: '2px solid var(--primary)' }}>
@@ -294,6 +321,144 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
           </div>
         )}
       </div>
+      </>}
+
+      {activeTab === 'ene' && (
+        <EneTab contratos={ene} umd={detalhe.umd_codigo} />
+      )}
     </div>
   );
 };
+
+// ── ENE tab ────────────────────────────────────────────────────────────────
+function EneTab({ contratos, umd }: { contratos: EneContrato[]; umd: string }) {
+  const totalContratado = contratos.reduce((s, c) => s + c.qtde_contratada, 0);
+  const totalEmpenhado  = contratos.reduce((s, c) => s + c.qtde_empenhada,  0);
+  const totalSaldo      = contratos.reduce((s, c) => s + c.saldo, 0);
+
+  if (contratos.length === 0) {
+    return (
+      <div className="glass-panel" style={{ padding: '48px', textAlign: 'center', color: 'var(--text-muted)' }}>
+        <FileText size={36} style={{ opacity: 0.3, marginBottom: '12px', display: 'block', margin: '0 auto 12px' }} />
+        Nenhum contrato ENE ativo para este material
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* ENE KPIs */}
+      <div className="kpi-grid">
+        <div className="glass-panel kpi-card" style={{ borderTop: '2px solid var(--primary)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span className="kpi-title">Saldo Total ENE</span>
+            <FileText size={20} color="var(--primary)" />
+          </div>
+          <div className="kpi-value" style={{ color: totalSaldo <= 0 ? '#ef4444' : 'var(--primary)' }}>
+            {totalSaldo.toLocaleString('pt-BR')} {umd}
+          </div>
+        </div>
+        <div className="glass-panel kpi-card" style={{ borderTop: '2px solid #10b981' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span className="kpi-title">Total Contratado</span>
+            <Package size={20} color="#10b981" />
+          </div>
+          <div className="kpi-value" style={{ color: '#10b981' }}>
+            {totalContratado.toLocaleString('pt-BR')} {umd}
+          </div>
+        </div>
+        <div className="glass-panel kpi-card" style={{ borderTop: '2px solid #f59e0b' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span className="kpi-title">Total Empenhado</span>
+            <TrendingUp size={20} color="#f59e0b" />
+          </div>
+          <div className="kpi-value" style={{ color: '#f59e0b' }}>
+            {totalEmpenhado.toLocaleString('pt-BR')} {umd}
+          </div>
+        </div>
+        <div className="glass-panel kpi-card" style={{ borderTop: '2px solid var(--secondary)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span className="kpi-title">Contratos Ativos</span>
+            <Calendar size={20} color="var(--secondary)" />
+          </div>
+          <div className="kpi-value" style={{ fontSize: '1.4rem', color: 'var(--secondary)' }}>
+            {contratos.length}
+          </div>
+        </div>
+      </div>
+
+      {/* Contracts table */}
+      <div className="glass-panel" style={{ overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--panel-border)' }}>
+                {['Pregão', 'AF / Lote', 'Fornecedor', 'Item', 'Contratado', 'Empenhado', 'Saldo', 'Vencimento', 'Situação'].map(h => (
+                  <th key={h} style={{
+                    padding: '12px 14px', textAlign: 'left',
+                    color: 'var(--text-muted)', fontWeight: 600,
+                    fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em',
+                    whiteSpace: 'nowrap',
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {contratos.map((c, i) => {
+                const pct = c.qtde_contratada > 0 ? (c.qtde_empenhada / c.qtde_contratada) * 100 : 0;
+                const saldoColor = c.saldo <= 0 ? '#ef4444' : c.saldo < c.qtde_contratada * 0.1 ? '#f59e0b' : '#10b981';
+                const venc = new Date(c.vencimento);
+                const daysLeft = Math.round((venc.getTime() - Date.now()) / 86400000);
+                const vencColor = daysLeft < 30 ? '#ef4444' : daysLeft < 90 ? '#f59e0b' : 'var(--text-muted)';
+                return (
+                  <tr key={i} style={{ borderBottom: '1px solid var(--panel-border)' }}>
+                    <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: 'var(--primary)', fontWeight: 600 }}>
+                      {c.pregao}
+                    </td>
+                    <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                      {c.nro_af}/{c.cpto}
+                    </td>
+                    <td style={{ padding: '10px 14px', maxWidth: '220px' }}>
+                      <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {c.fornecedor}
+                      </div>
+                    </td>
+                    <td style={{ padding: '10px 14px', color: 'var(--text-muted)', textAlign: 'center' }}>
+                      {c.item}
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                      {c.qtde_contratada.toLocaleString('pt-BR')}
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                      <div>{c.qtde_empenhada.toLocaleString('pt-BR')}</div>
+                      <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{pct.toFixed(0)}%</div>
+                    </td>
+                    <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>
+                      <span style={{ color: saldoColor }}>{c.saldo.toLocaleString('pt-BR')}</span>
+                    </td>
+                    <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: vencColor }}>
+                      {venc.toLocaleDateString('pt-BR')}
+                      {daysLeft < 90 && (
+                        <div style={{ fontSize: '0.65rem' }}>{daysLeft}d restantes</div>
+                      )}
+                    </td>
+                    <td style={{ padding: '10px 14px' }}>
+                      <span style={{
+                        background: c.status === 'A EFETIVAR' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.15)',
+                        color:      c.status === 'A EFETIVAR' ? '#10b981'                : '#f59e0b',
+                        borderRadius: '6px', padding: '2px 8px', fontSize: '0.7rem', fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {c.status === 'A EFETIVAR' ? 'Ativo' : 'Parcial'}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}

@@ -102,6 +102,19 @@ export interface Notification {
   lida: number;
 }
 
+export interface EneContrato {
+  nro_af: number;
+  cpto: number;
+  pregao: string;
+  vencimento: string;
+  status: string;
+  fornecedor: string;
+  item: number;
+  qtde_contratada: number;
+  qtde_empenhada: number;
+  saldo: number;
+}
+
 export const api = {
   stats: (almox = 1): Promise<Stats> =>
     fetch(`${BASE}/api/g36/stats?almox=${almox}`).then(r => handleResponse<Stats>(r)),
@@ -201,6 +214,9 @@ export const api = {
 
   criticidade: (): Promise<CriticalityRule> =>
     fetch(`${BASE}/api/monitoramento/criticidade`).then(r => handleResponse<CriticalityRule>(r)),
+
+  eneContratos: (codigo: number): Promise<EneContrato[]> =>
+    fetch(`${BASE}/api/ene/materiais/${codigo}`).then(r => handleResponse<EneContrato[]>(r)),
 
   updateCriticidade: (id: number, data: Omit<CriticalityRule, 'id' | 'ativo'>): Promise<CriticalityRule> =>
     fetch(`${BASE}/api/monitoramento/criticidade/${id}`, {
