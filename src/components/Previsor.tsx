@@ -41,22 +41,9 @@ export const Previsor: React.FC<Props> = ({ almox }) => {
       setLoading(true);
       setError(null);
       try {
-        const first = await api.materiais({ almox, limit: 200, page: 1 });
+        const rows = await api.ruptura(almox, 90);
         if (cancelled) return;
-
-        const totalPages = Math.ceil(first.total / 200);
-        let allMateriais = [...first.data];
-
-        for (let p = 2; p <= totalPages; p++) {
-          if (cancelled) return;
-          const result = await api.materiais({ almox, limit: 200, page: p });
-          allMateriais = allMateriais.concat(result.data);
-        }
-
-        const withCriticidade = allMateriais
-          .filter(m => m.dias_ate_ruptura !== null && m.dias_ate_ruptura <= 90)
-          .sort((a, b) => (a.dias_ate_ruptura ?? 9999) - (b.dias_ate_ruptura ?? 9999));
-        setData(withCriticidade);
+        setData(rows);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar previsões');
