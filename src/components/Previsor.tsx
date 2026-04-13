@@ -16,32 +16,52 @@ export const Previsor: React.FC<Props> = ({ almox }) => {
   const [selected, setSelected] = useState<number | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     const load = async () => {
       setLoading(true);
       setError(null);
       try {
-        // Fetch first 200 to get most critical ones with dias_ate_ruptura
-        const result = await api.materiais({ almox, limit: 200, page: 1 });
-        const withRuptura = result.data
+        // Fetch all pages to not miss materials with imminent rupture
+        const first = await api.materiais({ almox, limit: 200, page: 1 });
+        if (cancelled) return;
+
+        const totalPages = Math.ceil(first.total / 200);
+        let allMateriais = [...first.data];
+
+        if (totalPages > 1) {
+          const rest = await Promise.all(
+            Array.from({ length: totalPages - 1 }, (_, i) =>
+              api.materiais({ almox, limit: 200, page: i + 2 })
+            )
+          );
+          if (cancelled) return;
+          allMateriais = allMateriais.concat(rest.flatMap(r => r.data));
+        }
+
+        const withRuptura = allMateriais
           .filter(m => m.dias_ate_ruptura !== null && m.dias_ate_ruptura <= 90)
           .sort((a, b) => (a.dias_ate_ruptura ?? 9999) - (b.dias_ate_ruptura ?? 9999));
         setData(withRuptura);
       } catch (err) {
+        if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Erro ao carregar previsões');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
+
     load();
+    return () => { cancelled = true; };
   }, [almox]);
 
   if (selected !== null) {
     return <MaterialDetail codigo={selected} almox={almox} onBack={() => setSelected(null)} />;
   }
 
-  const urgente   = data.filter(m => (m.dias_ate_ruptura ?? 9999) <= 15);
-  const atencao   = data.filter(m => (m.dias_ate_ruptura ?? 9999) > 15 && (m.dias_ate_ruptura ?? 9999) <= 30);
-  const moderado  = data.filter(m => (m.dias_ate_ruptura ?? 9999) > 30 && (m.dias_ate_ruptura ?? 9999) <= 90);
+  const urgente  = data.filter(m => (m.dias_ate_ruptura ?? 9999) <= 15);
+  const atencao  = data.filter(m => (m.dias_ate_ruptura ?? 9999) > 15 && (m.dias_ate_ruptura ?? 9999) <= 30);
+  const moderado = data.filter(m => (m.dias_ate_ruptura ?? 9999) > 30 && (m.dias_ate_ruptura ?? 9999) <= 90);
 
   const renderGroup = (title: string, color: string, items: Material[], icon: React.ReactNode) => (
     items.length > 0 && (
@@ -103,9 +123,9 @@ export const Previsor: React.FC<Props> = ({ almox }) => {
       {/* Summary cards */}
       <div className="kpi-grid">
         {[
-          { label: 'Ruptura ≤ 15 dias', count: urgente.length,  color: '#ef4444', icon: AlertTriangle },
-          { label: 'Ruptura 16–30 dias', count: atencao.length,  color: '#f97316', icon: Clock },
-          { label: 'Ruptura 31–90 dias', count: moderado.length, color: '#f59e0b', icon: TrendingDown },
+          { label: 'Ruptura ≤ 15 dias',  count: loading ? '—' : urgente.length,  color: '#ef4444', icon: AlertTriangle },
+          { label: 'Ruptura 16–30 dias', count: loading ? '—' : atencao.length,  color: '#f97316', icon: Clock },
+          { label: 'Ruptura 31–90 dias', count: loading ? '—' : moderado.length, color: '#f59e0b', icon: TrendingDown },
         ].map(({ label, count, color, icon: Icon }) => (
           <div key={label} className="glass-panel kpi-card" style={{ borderTop: `2px solid ${color}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>

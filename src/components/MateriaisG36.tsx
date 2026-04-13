@@ -23,23 +23,28 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
   const [error, setError] = useState<string | null>(null);
   const [selectedMat, setSelectedMat] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Stale-request guard: only the most recent load call may update state
+  const loadSeqRef = useRef(0);
 
   const load = useCallback(async () => {
+    const seq = ++loadSeqRef.current;
     setLoading(true);
     setError(null);
     try {
       const result = await api.materiais({ page, limit: LIMIT, search: debouncedSearch, almox });
+      if (seq !== loadSeqRef.current) return; // discard stale response
       setData(result);
     } catch (err) {
+      if (seq !== loadSeqRef.current) return;
       setError(err instanceof Error ? err.message : 'Erro ao carregar materiais');
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, [page, debouncedSearch, almox]);
 
   useEffect(() => { load(); }, [load]);
 
-  // Debounce search
+  // Debounce search — reset to page 1
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
@@ -48,6 +53,11 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
     }, 400);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [search]);
+
+  // Reset to page 1 when alert filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [alertFilter]);
 
   if (selectedMat !== null) {
     return <MaterialDetail codigo={selectedMat} almox={almox} onBack={() => setSelectedMat(null)} />;
@@ -58,6 +68,7 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
     : (data?.data ?? []).filter(m => m.alerta === alertFilter);
 
   const totalPages = data ? Math.ceil(data.total / LIMIT) : 1;
+  const filterActive = alertFilter !== 'todos';
 
   return (
     <div className="content-area">
@@ -66,7 +77,11 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
         <div>
           <h1 style={{ fontSize: '1.5rem', marginBottom: '4px' }}>Materiais Hospitalares — Grupo 36</h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-            {data ? `${data.total.toLocaleString('pt-BR')} materiais encontrados` : 'Carregando...'}
+            {data
+              ? filterActive
+                ? `${filtered.length} de ${LIMIT} materiais nesta página · ${data.total.toLocaleString('pt-BR')} no total`
+                : `${data.total.toLocaleString('pt-BR')} materiais encontrados`
+              : 'Carregando...'}
           </p>
         </div>
         <button onClick={load} style={{
@@ -121,13 +136,13 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
       </div>
 
       {/* Alert filter scope warning */}
-      {alertFilter !== 'todos' && (
+      {filterActive && (
         <div style={{
           padding: '8px 14px', borderRadius: '8px', fontSize: '0.8rem',
           background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)',
           color: '#f59e0b',
         }}>
-          ⚠ O filtro é aplicado apenas nos {LIMIT} materiais carregados nesta página. Outras páginas podem conter materiais com este status.
+          ⚠ O filtro é aplicado por página. Use a paginação abaixo para verificar outras páginas.
         </div>
       )}
 
