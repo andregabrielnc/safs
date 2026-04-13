@@ -20,7 +20,9 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
-    api.almoxarifados().then(setAlmoxarifados).catch(() => {});
+    api.almoxarifados()
+      .then(setAlmoxarifados)
+      .catch(err => console.error('Erro ao carregar almoxarifados:', err));
   }, []);
 
   const toggleTheme = () => setTheme(prev => prev === 'dark' ? 'light' : 'dark');

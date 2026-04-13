@@ -24,4 +24,3 @@ export const AlertBadge: React.FC<{ level: AlertLevel }> = ({ level }) => {
   );
 };
 
-export const alertColor = (level: AlertLevel) => config[level]?.color ?? '#10b981';

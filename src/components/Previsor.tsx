@@ -12,18 +12,25 @@ interface Props {
 export const Previsor: React.FC<Props> = ({ almox }) => {
   const [data, setData] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      // Fetch first 200 to get most critical ones with dias_ate_ruptura
-      const result = await api.materiais({ almox, limit: 200, page: 1 });
-      const withRuptura = result.data
-        .filter(m => m.dias_ate_ruptura !== null && m.dias_ate_ruptura <= 90)
-        .sort((a, b) => (a.dias_ate_ruptura ?? 9999) - (b.dias_ate_ruptura ?? 9999));
-      setData(withRuptura);
-      setLoading(false);
+      setError(null);
+      try {
+        // Fetch first 200 to get most critical ones with dias_ate_ruptura
+        const result = await api.materiais({ almox, limit: 200, page: 1 });
+        const withRuptura = result.data
+          .filter(m => m.dias_ate_ruptura !== null && m.dias_ate_ruptura <= 90)
+          .sort((a, b) => (a.dias_ate_ruptura ?? 9999) - (b.dias_ate_ruptura ?? 9999));
+        setData(withRuptura);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erro ao carregar previsões');
+      } finally {
+        setLoading(false);
+      }
     };
     load();
   }, [almox]);
@@ -110,7 +117,11 @@ export const Previsor: React.FC<Props> = ({ almox }) => {
         ))}
       </div>
 
-      {loading ? (
+      {error ? (
+        <div className="glass-panel" style={{ padding: '60px', textAlign: 'center', color: '#ef4444' }}>
+          {error}
+        </div>
+      ) : loading ? (
         <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-muted)' }}>
           Analisando consumo dos materiais...
         </div>

@@ -1,5 +1,10 @@
 const BASE = import.meta.env.VITE_API_URL ?? '';
 
+async function handleResponse<T>(r: Response): Promise<T> {
+  if (!r.ok) throw new Error(`Erro na API: ${r.status} ${r.statusText}`);
+  return r.json();
+}
+
 export interface Material {
   codigo: number;
   nome: string;
@@ -52,7 +57,7 @@ export interface Almoxarifado {
 
 export const api = {
   stats: (almox = 1): Promise<Stats> =>
-    fetch(`${BASE}/api/g36/stats?almox=${almox}`).then(r => r.json()),
+    fetch(`${BASE}/api/g36/stats?almox=${almox}`).then(r => handleResponse<Stats>(r)),
 
   materiais: (params: {
     page?: number; limit?: number; search?: string; almox?: number;
@@ -63,15 +68,15 @@ export const api = {
       almox: String(params.almox ?? 1),
       ...(params.search ? { search: params.search } : {}),
     });
-    return fetch(`${BASE}/api/g36/materiais?${qs}`).then(r => r.json());
+    return fetch(`${BASE}/api/g36/materiais?${qs}`).then(r => handleResponse<MateriaisResponse>(r));
   },
 
   material: (codigo: number, almox = 1): Promise<MaterialDetalhe> =>
-    fetch(`${BASE}/api/g36/materiais/${codigo}?almox=${almox}`).then(r => r.json()),
+    fetch(`${BASE}/api/g36/materiais/${codigo}?almox=${almox}`).then(r => handleResponse<MaterialDetalhe>(r)),
 
   consumo: (codigo: number, almox = 1, meses = 24): Promise<ConsumoMensal[]> =>
-    fetch(`${BASE}/api/g36/materiais/${codigo}/consumo?almox=${almox}&meses=${meses}`).then(r => r.json()),
+    fetch(`${BASE}/api/g36/materiais/${codigo}/consumo?almox=${almox}&meses=${meses}`).then(r => handleResponse<ConsumoMensal[]>(r)),
 
   almoxarifados: (): Promise<Almoxarifado[]> =>
-    fetch(`${BASE}/api/g36/almoxarifados`).then(r => r.json()),
+    fetch(`${BASE}/api/g36/almoxarifados`).then(r => handleResponse<Almoxarifado[]>(r)),
 };

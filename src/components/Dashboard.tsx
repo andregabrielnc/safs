@@ -16,17 +16,24 @@ export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate
   const [stats, setStats] = useState<Stats | null>(null);
   const [criticos, setCriticos] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const [s, mat] = await Promise.all([
-        api.stats(almox),
-        api.materiais({ almox, limit: 8, page: 1 }),
-      ]);
-      setStats(s);
-      setCriticos(mat.data.filter(m => m.alerta === 'critico' || m.alerta === 'baixo').slice(0, 8));
-      setLoading(false);
+      setError(null);
+      try {
+        const [s, mat] = await Promise.all([
+          api.stats(almox),
+          api.materiais({ almox, limit: 60, page: 1 }),
+        ]);
+        setStats(s);
+        setCriticos(mat.data.filter(m => m.alerta === 'critico' || m.alerta === 'baixo'));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Erro ao carregar dashboard');
+      } finally {
+        setLoading(false);
+      }
     };
     load();
   }, [almox]);
@@ -34,6 +41,12 @@ export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate
   if (loading) return (
     <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
       <div style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Carregando dashboard...</div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+      <div style={{ color: '#ef4444', fontSize: '1rem' }}>{error}</div>
     </div>
   );
 

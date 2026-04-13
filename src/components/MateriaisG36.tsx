@@ -20,14 +20,21 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [alertFilter, setAlertFilter] = useState<AlertFilter>('todos');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedMat, setSelectedMat] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const result = await api.materiais({ page, limit: LIMIT, search: debouncedSearch, almox });
-    setData(result);
-    setLoading(false);
+    setError(null);
+    try {
+      const result = await api.materiais({ page, limit: LIMIT, search: debouncedSearch, almox });
+      setData(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar materiais');
+    } finally {
+      setLoading(false);
+    }
   }, [page, debouncedSearch, almox]);
 
   useEffect(() => { load(); }, [load]);
@@ -113,9 +120,24 @@ export const MateriaisG36: React.FC<Props> = ({ almox }) => {
         </div>
       </div>
 
+      {/* Alert filter scope warning */}
+      {alertFilter !== 'todos' && (
+        <div style={{
+          padding: '8px 14px', borderRadius: '8px', fontSize: '0.8rem',
+          background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)',
+          color: '#f59e0b',
+        }}>
+          ⚠ O filtro é aplicado apenas nos {LIMIT} materiais carregados nesta página. Outras páginas podem conter materiais com este status.
+        </div>
+      )}
+
       {/* Table */}
       <div className="glass-panel" style={{ overflow: 'hidden' }}>
-        {loading ? (
+        {error ? (
+          <div style={{ padding: '40px', textAlign: 'center', color: '#ef4444' }}>
+            {error}
+          </div>
+        ) : loading ? (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
             Carregando materiais...
           </div>

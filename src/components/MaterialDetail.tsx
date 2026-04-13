@@ -19,7 +19,9 @@ function linearRegression(data: { x: number; y: number }[]) {
   const sumY  = data.reduce((s, d) => s + d.y, 0);
   const sumXY = data.reduce((s, d) => s + d.x * d.y, 0);
   const sumX2 = data.reduce((s, d) => s + d.x * d.x, 0);
-  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  const denom = n * sumX2 - sumX * sumX;
+  if (denom === 0) return { slope: 0, intercept: sumY / n };
+  const slope = (n * sumXY - sumX * sumY) / denom;
   const intercept = (sumY - slope * sumX) / n;
   return { slope, intercept };
 }
@@ -28,16 +30,23 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
   const [detalhe, setDetalhe] = useState<MaterialDetalhe | null>(null);
   const [consumo, setConsumo] = useState<ConsumoMensal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [d, c] = await Promise.all([
-      api.material(codigo, almox),
-      api.consumo(codigo, almox, 24),
-    ]);
-    setDetalhe(d);
-    setConsumo(c);
-    setLoading(false);
+    setError(null);
+    try {
+      const [d, c] = await Promise.all([
+        api.material(codigo, almox),
+        api.consumo(codigo, almox, 24),
+      ]);
+      setDetalhe(d);
+      setConsumo(c);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao carregar material');
+    } finally {
+      setLoading(false);
+    }
   }, [codigo, almox]);
 
   useEffect(() => { load(); }, [load]);
@@ -45,6 +54,12 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
   if (loading) return (
     <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
       <div style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Carregando dados...</div>
+    </div>
+  );
+
+  if (error) return (
+    <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh' }}>
+      <div style={{ color: '#ef4444', fontSize: '1rem' }}>{error}</div>
     </div>
   );
 
