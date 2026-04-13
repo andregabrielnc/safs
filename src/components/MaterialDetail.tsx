@@ -113,17 +113,52 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
     });
   }
 
-  // Predictor: project forward until stock reaches zero
-  const previsaoData: { mes: string; valor: number; tipo: string }[] = [];
+  // ── Urgência baseada em diasAteRuptura ────────────────────────────────────
+  const urgencia =
+    diasAteRuptura === null  ? null
+    : diasAteRuptura <= 0    ? 'zerado'
+    : diasAteRuptura < 30    ? 'critico'
+    : diasAteRuptura < 60    ? 'atencao'
+    : diasAteRuptura < 90    ? 'baixo'
+    : null;
+
+  const urgenciaMeta = {
+    zerado:  { label: 'Estoque zerado',                  color: '#ef4444', bg: 'rgba(239,68,68,0.15)'  },
+    critico: { label: `Crítico — esgota em ${diasAteRuptura}d`, color: '#ef4444', bg: 'rgba(239,68,68,0.15)'  },
+    atencao: { label: `Atenção — esgota em ${diasAteRuptura}d`, color: '#f97316', bg: 'rgba(249,115,22,0.15)' },
+    baixo:   { label: `Baixo — esgota em ${diasAteRuptura}d`,   color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' },
+  };
+
+  // ── Data estimada de esgotamento ────────────────────────────────────────
+  const dataEsgotamento = diasAteRuptura !== null && diasAteRuptura > 0 ? (() => {
+    const d = new Date();
+    d.setDate(d.getDate() + diasAteRuptura);
+    return d.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
+  })() : null;
+
+  // ── Cor da linha de projeção por urgência ──────────────────────────────
+  const previsaoColor =
+    urgencia === 'critico' || urgencia === 'zerado' ? '#ef4444'
+    : urgencia === 'atencao' ? '#f97316'
+    : urgencia === 'baixo'   ? '#f59e0b'
+    : '#10b981';
+
+  // ── Predictor: projeção a partir do mês atual, estoque atual como âncora ─
+  const previsaoData: { mes: string; valor: number }[] = [];
   if (mediaConsumo > 0 && diasAteRuptura !== null) {
+    // Bug fix: sempre começa do mês corrente, não do último dado histórico
+    const originDate = new Date(currentMonth + '-01');
+    // Ponto de partida: estoque atual no mês corrente
+    previsaoData.push({ mes: currentMonth, valor: estoque });
+    const maxMeses = Math.min(Math.ceil(diasAteRuptura / 30) + 2, 18);
     let estqAtual = estoque;
-    const lastDate = consumo.length ? new Date(consumo[consumo.length - 1].competencia + '-01') : new Date();
-    for (let m = 1; m <= Math.min(Math.ceil(diasAteRuptura / 30) + 2, 12); m++) {
-      const d = new Date(lastDate);
+    for (let m = 1; m <= maxMeses; m++) {
+      const d = new Date(originDate);
       d.setMonth(d.getMonth() + m);
       const label = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       estqAtual = Math.max(0, estqAtual - mediaConsumo);
-      previsaoData.push({ mes: label, valor: Math.round(estqAtual), tipo: 'Estoque Previsto' });
+      previsaoData.push({ mes: label, valor: Math.round(estqAtual) });
+      if (estqAtual === 0) break; // para no zero, não projeta negativos
     }
   }
 
@@ -168,27 +203,41 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
     },
   };
 
+  const previsaoAnnotations = [];
+  if (previsaoData.some(d => d.valor === 0)) {
+    previsaoAnnotations.push({
+      type: 'lineY',
+      data: [0],
+      style: { stroke: '#ef4444', lineDash: [4, 4], lineWidth: 1.5 },
+      label: { text: 'Esgotamento', style: { fill: '#ef4444', fontSize: 11 } },
+    });
+  }
+  // Linha de referência no threshold de estoque crítico (valor 0 já está acima)
+  // Adiciona marcador visual de "zona de risco" no nível do consumo médio mensal (1 mês restante)
+  if (mediaConsumo > 0 && estoque > mediaConsumo) {
+    previsaoAnnotations.push({
+      type: 'lineY',
+      data: [Math.round(mediaConsumo)],
+      style: { stroke: '#f59e0b', lineDash: [3, 3], lineWidth: 1.2 },
+      label: { text: '1 mês de estoque', style: { fill: '#f59e0b', fontSize: 10 } },
+    });
+  }
+
   const previsaoConfig = {
     data: previsaoData,
     xField: 'mes',
     yField: 'valor',
-    style: { stroke: '#ef4444', lineWidth: 2 },
-    point: { shapeField: 'diamond', sizeField: 4 },
+    style: { stroke: previsaoColor, lineWidth: 2.5 },
+    point: { shapeField: 'diamond', sizeField: 5, style: { fill: previsaoColor } },
+    area: { style: { fill: previsaoColor, fillOpacity: 0.08 } },
     axis: {
-      x: { labelFill: '#94a3b8' },
-      y: { labelFill: '#94a3b8' },
+      x: { labelFill: '#94a3b8', labelAutoRotate: true },
+      y: { labelFill: '#94a3b8', title: 'Estoque', titleFill: '#94a3b8', titleFontSize: 11 },
     },
-    annotations: previsaoData.some(d => d.valor === 0) ? [
-      {
-        type: 'lineY',
-        data: [0],
-        style: { stroke: '#ef4444', lineDash: [4, 4] },
-        label: { text: 'Esgotamento', style: { fill: '#ef4444', fontSize: 12 } },
-      },
-    ] : [],
+    annotations: previsaoAnnotations,
     tooltip: {
       items: [
-        { field: 'valor', name: 'Estoque', valueFormatter: (v: number) => v.toLocaleString('pt-BR') },
+        { field: 'valor', name: 'Estoque previsto', valueFormatter: (v: number) => v.toLocaleString('pt-BR') },
       ],
     },
   };
@@ -261,14 +310,27 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
           </div>
         </div>
 
-        <div className="glass-panel kpi-card" style={{ borderTop: `2px solid ${diasAteRuptura !== null && diasAteRuptura < 30 ? '#ef4444' : '#f59e0b'}` }}>
+        <div className="glass-panel kpi-card" style={{ borderTop: `2px solid ${urgencia ? urgenciaMeta[urgencia].color : '#10b981'}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span className="kpi-title">Criticidade de Estoque</span>
-            <AlertTriangle size={20} color={diasAteRuptura !== null && diasAteRuptura < 30 ? '#ef4444' : '#f59e0b'} />
+            <span className="kpi-title">Previsão de Esgotamento</span>
+            <AlertTriangle size={20} color={urgencia ? urgenciaMeta[urgencia].color : '#10b981'} />
           </div>
-          <div className="kpi-value" style={{ color: diasAteRuptura !== null && diasAteRuptura < 30 ? '#ef4444' : '#f59e0b' }}>
-            {diasAteRuptura !== null ? `${diasAteRuptura} dias` : estoque === 0 ? 'Zerado' : 'Sem consumo'}
+          <div className="kpi-value" style={{ color: urgencia ? urgenciaMeta[urgencia].color : '#10b981', fontSize: '1.25rem' }}>
+            {diasAteRuptura !== null ? `${diasAteRuptura} dias` : estoque === 0 ? 'Zerado' : '—'}
           </div>
+          {dataEsgotamento && (
+            <div style={{ fontSize: '0.72rem', color: urgencia ? urgenciaMeta[urgencia].color : '#10b981', marginTop: '4px', opacity: 0.85 }}>
+              Previsto para {dataEsgotamento}
+            </div>
+          )}
+          {!urgencia && diasAteRuptura !== null && (
+            <div style={{ fontSize: '0.72rem', color: '#10b981', marginTop: '4px', opacity: 0.85 }}>
+              Estoque suficiente
+            </div>
+          )}
+          {diasAteRuptura === null && estoque > 0 && (
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '4px' }}>Sem consumo registrado</div>
+          )}
         </div>
 
         <div className="glass-panel kpi-card" style={{ borderTop: '2px solid var(--secondary)' }}>
@@ -300,22 +362,36 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
           </div>
         </div>
 
-        {previsaoData.length > 0 && (
+        {previsaoData.length > 1 && (
           <div className="glass-panel" style={{ padding: '24px', gridColumn: '1 / -1' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', flexWrap: 'wrap' }}>
               <h3 style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Previsão de Esgotamento
               </h3>
-              {diasAteRuptura !== null && diasAteRuptura < 30 && (
-                <span style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: '6px', padding: '2px 10px', fontSize: '0.75rem', fontWeight: 700 }}>
-                  ⚠ Estoque Crítico — esgota em {diasAteRuptura} dias
+              {urgencia && (
+                <span style={{
+                  background: urgenciaMeta[urgencia].bg,
+                  color: urgenciaMeta[urgencia].color,
+                  borderRadius: '6px', padding: '2px 10px',
+                  fontSize: '0.75rem', fontWeight: 700,
+                }}>
+                  ⚠ {urgenciaMeta[urgencia].label}
+                </span>
+              )}
+              {dataEsgotamento && (
+                <span style={{
+                  background: 'var(--panel-highlight)', border: '1px solid var(--panel-border)',
+                  borderRadius: '6px', padding: '2px 10px',
+                  fontSize: '0.75rem', color: 'var(--text-muted)',
+                }}>
+                  Data estimada: {dataEsgotamento}
                 </span>
               )}
             </div>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '16px' }}>
-              Projeção baseada na média dos últimos {Math.min(mesesConsumo.length, 6)} meses com consumo real ({Math.round(mediaConsumo).toLocaleString('pt-BR')} {detalhe.umd_codigo}/mês)
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.78rem', marginBottom: '16px' }}>
+              Projeção a partir de hoje · média dos últimos {Math.min(mesesConsumo.length, 6)} meses: {Math.round(mediaConsumo).toLocaleString('pt-BR')} / mês
             </p>
-            <div style={{ height: '240px' }}>
+            <div style={{ height: '260px' }}>
               <Line {...previsaoConfig} />
             </div>
           </div>
