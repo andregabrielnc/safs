@@ -142,7 +142,7 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
         type: 'line',
         yField: 0,
         style: { stroke: '#ef4444', lineDash: [4, 4] },
-        label: { text: 'Ruptura', style: { fill: '#ef4444', fontSize: 12 } },
+        label: { text: 'Esgotamento', style: { fill: '#ef4444', fontSize: 12 } },
       },
     ] : [],
     tooltip: {
@@ -199,7 +199,7 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
 
         <div className="glass-panel kpi-card" style={{ borderTop: `2px solid ${diasAteRuptura !== null && diasAteRuptura < 30 ? '#ef4444' : '#f59e0b'}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span className="kpi-title">Previsão de Ruptura</span>
+            <span className="kpi-title">Criticidade de Estoque</span>
             <AlertTriangle size={20} color={diasAteRuptura !== null && diasAteRuptura < 30 ? '#ef4444' : '#f59e0b'} />
           </div>
           <div className="kpi-value" style={{ color: diasAteRuptura !== null && diasAteRuptura < 30 ? '#ef4444' : '#f59e0b' }}>
@@ -238,11 +238,11 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
           <div className="glass-panel" style={{ padding: '24px', gridColumn: '1 / -1' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
               <h3 style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Previsor de Estoque
+                Previsão de Esgotamento
               </h3>
               {diasAteRuptura !== null && diasAteRuptura < 30 && (
                 <span style={{ background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: '6px', padding: '2px 10px', fontSize: '0.75rem', fontWeight: 700 }}>
-                  ⚠ Ruptura em {diasAteRuptura} dias
+                  ⚠ Estoque Crítico — esgota em {diasAteRuptura} dias
                 </span>
               )}
             </div>

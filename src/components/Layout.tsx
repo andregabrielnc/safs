@@ -15,7 +15,7 @@ interface LayoutProps {
 const navItems = [
   { id: 'dashboard', label: 'Dashboard',   icon: LayoutDashboard },
   { id: 'materiais', label: 'Materiais G36', icon: Package },
-  { id: 'previsor',  label: 'Previsor',     icon: BrainCircuit },
+  { id: 'previsor',  label: 'Criticidade',  icon: BrainCircuit },
 ];
 
 export const AppLayout: React.FC<LayoutProps> = ({

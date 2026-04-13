@@ -155,7 +155,7 @@ export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid var(--panel-border)' }}>
-              {['Código', 'Nome', 'Estoque', 'Consumo/mês', 'Ruptura em', 'Status'].map(h => (
+              {['Código', 'Nome', 'Estoque', 'Consumo/mês', 'Esgota em', 'Status'].map(h => (
                 <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{h}</th>
               ))}
             </tr>
