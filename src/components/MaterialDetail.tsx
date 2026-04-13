@@ -238,7 +238,7 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
         ))}
       </div>
 
-      {activeTab === 'geral' && <>
+      <div style={{ display: activeTab === 'geral' ? 'contents' : 'none' }}>
       {/* KPIs */}
       <div className="kpi-grid">
         <div className="glass-panel kpi-card" style={{ borderTop: '2px solid var(--primary)' }}>
@@ -321,11 +321,11 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
           </div>
         )}
       </div>
-      </>}
+      </div>
 
-      {activeTab === 'ene' && (
+      <div style={{ display: activeTab === 'ene' ? 'contents' : 'none' }}>
         <EneTab contratos={ene} umd={detalhe.umd_codigo} />
-      )}
+      </div>
     </div>
   );
 };
