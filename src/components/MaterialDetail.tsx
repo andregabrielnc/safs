@@ -79,7 +79,9 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
   const hasTrend = consumo.length >= TREND_MIN;
   const chartData: { mes: string; valor: number; tipo: string }[] = [];
 
-  // All 'Consumo Real' entries first, then all 'Tendência' — required by G2 v5 for series grouping
+  // G2 v5 requires consecutive same-series blocks: Consumo Real → Tendência → Estoque
+  const hasSaldo = consumo.some(c => c.saldo !== null);
+
   consumo.forEach((c) => {
     chartData.push({ mes: c.competencia, valor: Number(c.quantidade), tipo: 'Consumo Real' });
   });
@@ -88,6 +90,13 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
     const reg = linearRegression(consumoArr);
     consumo.forEach((c, i) => {
       chartData.push({ mes: c.competencia, valor: Math.max(0, Math.round(reg.slope * i + reg.intercept)), tipo: 'Tendência' });
+    });
+  }
+  if (hasSaldo) {
+    consumo.forEach((c) => {
+      if (c.saldo !== null) {
+        chartData.push({ mes: c.competencia, valor: Number(c.saldo), tipo: 'Estoque' });
+      }
     });
   }
 
@@ -105,22 +114,16 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
     }
   }
 
+  const colorDomain = ['Consumo Real', ...(hasTrend ? ['Tendência'] : []), ...(hasSaldo ? ['Estoque'] : [])];
+  const colorRange  = ['#00d2ff',      ...(hasTrend ? ['#f59e0b']   : []), ...(hasSaldo ? ['#a78bfa'] : [])];
+
   const consumoConfig = {
     data: chartData,
     xField: 'mes',
     yField: 'valor',
-    ...(hasTrend ? {
-      colorField: 'tipo',
-      scale: {
-        color: {
-          domain: ['Consumo Real', 'Tendência'],
-          range: ['#00d2ff', '#f59e0b'],
-        },
-      },
-    } : {
-      style: { stroke: '#00d2ff', lineWidth: 2 },
-    }),
-    ...(hasTrend ? { style: { lineWidth: 2 } } : {}),
+    colorField: 'tipo',
+    scale: { color: { domain: colorDomain, range: colorRange } },
+    style: { lineWidth: 2 },
     point: { size: 3 },
     axis: {
       x: { labelAutoRotate: true, labelFill: '#94a3b8' },
@@ -231,7 +234,7 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
         <div className="glass-panel" style={{ padding: '24px', gridColumn: '1 / -1' }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
             <h3 style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-              Consumo Mensal {hasTrend ? '+ Tendência' : ''} (últimos 24 meses)
+              Consumo Mensal{hasTrend ? ' + Tendência' : ''}{hasSaldo ? ' + Estoque' : ''} (últimos 24 meses)
             </h3>
           </div>
           <div style={{ height: '280px' }}>

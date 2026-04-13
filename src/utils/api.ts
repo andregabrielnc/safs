@@ -35,6 +35,7 @@ export interface ConsumoMensal {
   competencia: string;
   quantidade: number;
   valor: number;
+  saldo: number | null;
 }
 
 export interface MaterialDetalhe {
