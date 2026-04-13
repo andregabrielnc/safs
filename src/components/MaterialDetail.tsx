@@ -122,8 +122,17 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
     }
   }
 
-  const colorDomain = ['Consumo Real', ...(hasTrend ? ['Tendência'] : []), ...(hasSaldo ? ['Estoque'] : [])];
-  const colorRange  = ['#00d2ff',      ...(hasTrend ? ['#f59e0b']   : []), ...(hasSaldo ? ['#a78bfa'] : [])];
+  const hasConsumo  = mesesConsumo.length > 0;
+  const colorDomain = [
+    ...(hasConsumo ? ['Consumo Real'] : []),
+    ...(hasTrend   ? ['Tendência']   : []),
+    ...(hasSaldo   ? ['Estoque']     : []),
+  ];
+  const colorRange = [
+    ...(hasConsumo ? ['#00d2ff'] : []),
+    ...(hasTrend   ? ['#f59e0b'] : []),
+    ...(hasSaldo   ? ['#a78bfa'] : []),
+  ];
 
   const consumoConfig = {
     data: chartData,
@@ -247,7 +256,7 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
             </h3>
           </div>
           <div style={{ height: '280px' }}>
-            {consumo.length > 0
+            {chartData.length > 0
               ? <Line {...consumoConfig} />
               : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)' }}>Sem dados de consumo</div>
             }
