@@ -14,7 +14,8 @@ interface Props {
 // Linear regression helper
 function linearRegression(data: { x: number; y: number }[]) {
   const n = data.length;
-  if (n < 2) return { slope: 0, intercept: 0 };
+  if (n === 0) return { slope: 0, intercept: 0 };
+  if (n === 1) return { slope: 0, intercept: data[0].y };
   const sumX  = data.reduce((s, d) => s + d.x, 0);
   const sumY  = data.reduce((s, d) => s + d.y, 0);
   const sumXY = data.reduce((s, d) => s + d.x * d.y, 0);
@@ -73,18 +74,22 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
 
   const alerta = estoque === 0 ? 'critico' : estoque < 10 ? 'baixo' : estoque < 20 ? 'atencao' : 'normal';
 
-  // Build chart data with trend line
+  // Build chart data — Tendência only when there are enough points for a meaningful regression
+  const TREND_MIN = 3;
+  const hasTrend = consumo.length >= TREND_MIN;
   const chartData: { mes: string; valor: number; tipo: string }[] = [];
 
-  const consumoArr = consumo.map((c, i) => ({ x: i, y: Number(c.quantidade) }));
-  const reg = linearRegression(consumoArr);
-
+  // All 'Consumo Real' entries first, then all 'Tendência' — required by G2 v5 for series grouping
   consumo.forEach((c) => {
     chartData.push({ mes: c.competencia, valor: Number(c.quantidade), tipo: 'Consumo Real' });
   });
-  consumo.forEach((c, i) => {
-    chartData.push({ mes: c.competencia, valor: Math.max(0, Math.round(reg.slope * i + reg.intercept)), tipo: 'Tendência' });
-  });
+  if (hasTrend) {
+    const consumoArr = consumo.map((c, i) => ({ x: i, y: Number(c.quantidade) }));
+    const reg = linearRegression(consumoArr);
+    consumo.forEach((c, i) => {
+      chartData.push({ mes: c.competencia, valor: Math.max(0, Math.round(reg.slope * i + reg.intercept)), tipo: 'Tendência' });
+    });
+  }
 
   // Predictor: project forward until stock reaches zero
   const previsaoData: { mes: string; valor: number; tipo: string }[] = [];
@@ -104,18 +109,19 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
     data: chartData,
     xField: 'mes',
     yField: 'valor',
-    colorField: 'tipo',
-    scale: {
-      color: {
-        domain: ['Consumo Real', 'Tendência'],
-        range: ['#00d2ff', '#f59e0b'],
+    ...(hasTrend ? {
+      colorField: 'tipo',
+      scale: {
+        color: {
+          domain: ['Consumo Real', 'Tendência'],
+          range: ['#00d2ff', '#f59e0b'],
+        },
       },
-    },
-    style: { lineWidth: 2 },
-    point: {
-      shapeField: 'square',
-      sizeField: 3,
-    },
+    } : {
+      style: { stroke: '#00d2ff', lineWidth: 2 },
+    }),
+    ...(hasTrend ? { style: { lineWidth: 2 } } : {}),
+    point: { size: 3 },
     axis: {
       x: { labelAutoRotate: true, labelFill: '#94a3b8' },
       y: { labelFill: '#94a3b8' },
@@ -223,9 +229,16 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
       {/* Charts */}
       <div className="charts-grid">
         <div className="glass-panel" style={{ padding: '24px', gridColumn: '1 / -1' }}>
-          <h3 style={{ marginBottom: '8px', color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Consumo Mensal + Tendência (últimos 24 meses)
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Consumo Mensal {hasTrend ? '+ Tendência' : ''} (últimos 24 meses)
+            </h3>
+            {consumo.length > 0 && !hasTrend && (
+              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                Tendência indisponível — mínimo {TREND_MIN} meses ({consumo.length} disponível{consumo.length !== 1 ? 'is' : ''})
+              </span>
+            )}
+          </div>
           <div style={{ height: '280px' }}>
             {consumo.length > 0
               ? <Line {...consumoConfig} />
