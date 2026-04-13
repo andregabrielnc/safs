@@ -180,8 +180,8 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
     },
     annotations: previsaoData.some(d => d.valor === 0) ? [
       {
-        type: 'line',
-        yField: 0,
+        type: 'lineY',
+        data: [0],
         style: { stroke: '#ef4444', lineDash: [4, 4] },
         label: { text: 'Esgotamento', style: { fill: '#ef4444', fontSize: 12 } },
       },
