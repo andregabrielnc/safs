@@ -33,8 +33,8 @@ export interface Stats {
 
 export interface ConsumoMensal {
   competencia: string;
-  quantidade: number;
-  valor: number;
+  quantidade: number | null;
+  valor: number | null;
   saldo: number | null;
 }
 

@@ -67,28 +67,33 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
   if (!detalhe) return null;
 
   const estoque = Number(detalhe.estoque) || 0;
-  const mediaConsumo = consumo.length
-    ? consumo.slice(-6).reduce((s, c) => s + Number(c.quantidade), 0) / Math.min(consumo.length, 6)
+
+  // Only months with real consumption (non-null, non-zero) for stats and trend
+  const mesesConsumo = consumo.filter(c => c.quantidade !== null && Number(c.quantidade) > 0);
+  const mediaConsumo = mesesConsumo.length
+    ? mesesConsumo.slice(-6).reduce((s, c) => s + Number(c.quantidade), 0) / Math.min(mesesConsumo.length, 6)
     : 0;
   const diasAteRuptura = mediaConsumo > 0 ? Math.round(estoque / (mediaConsumo / 30)) : null;
 
   const alerta = estoque === 0 ? 'critico' : estoque < 10 ? 'baixo' : estoque < 20 ? 'atencao' : 'normal';
 
-  // Build chart data — Tendência only when there are enough points for a meaningful regression
+  // Build chart data — Tendência only when there are enough real consumption points
   const TREND_MIN = 3;
-  const hasTrend = consumo.length >= TREND_MIN;
+  const hasTrend = mesesConsumo.length >= TREND_MIN;
   const chartData: { mes: string; valor: number; tipo: string }[] = [];
 
   // G2 v5 requires consecutive same-series blocks: Consumo Real → Tendência → Estoque
   const hasSaldo = consumo.some(c => c.saldo !== null);
 
-  consumo.forEach((c) => {
+  // Only push real consumption months (skip stock-only months with null quantidade)
+  mesesConsumo.forEach((c) => {
     chartData.push({ mes: c.competencia, valor: Number(c.quantidade), tipo: 'Consumo Real' });
   });
   if (hasTrend) {
-    const consumoArr = consumo.map((c, i) => ({ x: i, y: Number(c.quantidade) }));
+    // Regression uses sequential index over real consumption months only
+    const consumoArr = mesesConsumo.map((c, i) => ({ x: i, y: Number(c.quantidade) }));
     const reg = linearRegression(consumoArr);
-    consumo.forEach((c, i) => {
+    mesesConsumo.forEach((c, i) => {
       chartData.push({ mes: c.competencia, valor: Math.max(0, Math.round(reg.slope * i + reg.intercept)), tipo: 'Tendência' });
     });
   }
@@ -131,6 +136,7 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
     },
     tooltip: {
       items: [
+        { field: 'tipo', name: 'Série' },
         { field: 'valor', name: 'Qtd', valueFormatter: (v: number) => v.toLocaleString('pt-BR') },
       ],
     },
@@ -258,7 +264,7 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
               )}
             </div>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '16px' }}>
-              Projeção baseada na média de consumo dos últimos 6 meses ({Math.round(mediaConsumo).toLocaleString('pt-BR')} {detalhe.umd_codigo}/mês)
+              Projeção baseada na média dos últimos {Math.min(mesesConsumo.length, 6)} meses com consumo real ({Math.round(mediaConsumo).toLocaleString('pt-BR')} {detalhe.umd_codigo}/mês)
             </p>
             <div style={{ height: '240px' }}>
               <Line {...previsaoConfig} />
