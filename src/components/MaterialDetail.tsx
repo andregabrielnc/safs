@@ -233,11 +233,6 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
             <h3 style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
               Consumo Mensal {hasTrend ? '+ Tendência' : ''} (últimos 24 meses)
             </h3>
-            {consumo.length > 0 && !hasTrend && (
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontStyle: 'italic' }}>
-                Tendência indisponível — mínimo {TREND_MIN} meses ({consumo.length} disponível{consumo.length !== 1 ? 'is' : ''})
-              </span>
-            )}
           </div>
           <div style={{ height: '280px' }}>
             {consumo.length > 0
