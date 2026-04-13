@@ -44,6 +44,7 @@ export interface MaterialDetalhe {
   descricao: string;
   umd_codigo: string;
   estoque: number;
+  alerta: 'critico' | 'baixo' | 'atencao' | 'normal';
   qtde_estq_min: number;
   qtde_estq_max: number;
   qtde_ponto_pedido: number;
@@ -54,6 +55,15 @@ export interface MaterialDetalhe {
 export interface Almoxarifado {
   seq: number;
   descricao: string;
+}
+
+export interface CriticalityRule {
+  id: number;
+  nome: string;
+  limite_critico: number;
+  limite_baixo: number;
+  limite_atencao: number;
+  ativo: boolean;
 }
 
 export interface MonitoringLevel {
@@ -188,4 +198,14 @@ export const api = {
   recorrentes: (almox = 1, limit = 20): Promise<{ itens: { mat_codigo: number; mat_nome: string; total_acessos: number; ultimo_acesso: string }[]; buscas: { termo: string; total_buscas: number; ultima_busca: string }[] }> =>
     fetch(`${BASE}/api/monitoramento/recorrentes?almox=${almox}&limit=${limit}`)
       .then(r => handleResponse(r)),
+
+  criticidade: (): Promise<CriticalityRule> =>
+    fetch(`${BASE}/api/monitoramento/criticidade`).then(r => handleResponse<CriticalityRule>(r)),
+
+  updateCriticidade: (id: number, data: Omit<CriticalityRule, 'id' | 'ativo'>): Promise<CriticalityRule> =>
+    fetch(`${BASE}/api/monitoramento/criticidade/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(r => handleResponse<CriticalityRule>(r)),
 };

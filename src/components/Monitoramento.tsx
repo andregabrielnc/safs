@@ -1,345 +1,389 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Save, Settings2, Mail, Smartphone } from 'lucide-react';
+import { Plus, Trash2, Save, Settings2, Mail, Smartphone, ShieldAlert } from 'lucide-react';
 import { api } from '../utils/api';
-import type { MonitoringLevel } from '../utils/api';
+import type { MonitoringLevel, CriticalityRule } from '../utils/api';
 
 const DIAS_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
-// Apply Brazilian phone mask: (XX) XXXXX-XXXX or (XX) XXXX-XXXX
+type Tab = 'monitoramento' | 'criticidade';
+
+// ── Phone mask ───────────────────────────────────────────────────────────────
 function maskCelular(raw: string): string {
-  const digits = raw.replace(/\D/g, '').slice(0, 11);
-  if (digits.length === 0) return '';
-  if (digits.length <= 2)  return `(${digits}`;
-  if (digits.length <= 6)  return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
-  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  const d = raw.replace(/\D/g, '').slice(0, 11);
+  if (d.length === 0) return '';
+  if (d.length <= 2)  return `(${d}`;
+  if (d.length <= 6)  return `(${d.slice(0,2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
+  return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
 }
+const isValidCelular = (v: string) => { const d = v.replace(/\D/g,''); return d.length===10||d.length===11; };
+const isValidEmail   = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-function validateCelular(masked: string): boolean {
-  const digits = masked.replace(/\D/g, '');
-  return digits.length === 10 || digits.length === 11;
-}
+// ── Criticidade helpers ──────────────────────────────────────────────────────
+const ALERTA_COLORS: Record<string, string> = {
+  critico: '#ef4444', baixo: '#f97316', atencao: '#f59e0b', normal: '#10b981',
+};
+const ALERTA_LABELS: Record<string, string> = {
+  critico: 'Crítico', baixo: 'Baixo', atencao: 'Atenção', normal: 'Normal',
+};
 
-function validateEmail(v: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
-}
-
+// ── Main component ───────────────────────────────────────────────────────────
 export const Monitoramento: React.FC = () => {
+  const [tab, setTab] = useState<Tab>('monitoramento');
+
+  return (
+    <div className="content-area">
+      {/* Page header */}
+      <div style={{ marginBottom: '4px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+          <Settings2 size={22} color="var(--primary)" />
+          <h1 style={{ fontSize: '1.5rem', margin: 0 }}>Monitoramento de Estoque</h1>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '4px', borderBottom: '2px solid var(--panel-border)', marginBottom: '24px' }}>
+        {([
+          { id: 'monitoramento', label: 'Regras de Monitoramento' },
+          { id: 'criticidade',   label: 'Regras de Criticidade'   },
+        ] as { id: Tab; label: string }[]).map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            style={{
+              padding: '10px 20px', border: 'none', background: 'none', cursor: 'pointer',
+              fontSize: '0.875rem', fontWeight: 600,
+              color: tab === t.id ? 'var(--primary)' : 'var(--text-muted)',
+              borderBottom: `2px solid ${tab === t.id ? 'var(--primary)' : 'transparent'}`,
+              marginBottom: '-2px', transition: 'all 0.15s',
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'monitoramento' && <TabMonitoramento />}
+      {tab === 'criticidade'   && <TabCriticidade />}
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tab 1 — Regras de Monitoramento (current content)
+// ═══════════════════════════════════════════════════════════════════════════
+const TabMonitoramento: React.FC = () => {
   const [levels, setLevels] = useState<MonitoringLevel[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<number | null>(null);
-  const [saved, setSaved] = useState<number | null>(null);
-  const [errors, setErrors] = useState<Record<number, { email?: string; celular?: string }>>({});
+  const [loading, setLoading]  = useState(true);
+  const [saving,  setSaving]   = useState<number | null>(null);
+  const [saved,   setSaved]    = useState<number | null>(null);
+  const [errors,  setErrors]   = useState<Record<number, { email?: string; celular?: string }>>({});
 
   useEffect(() => {
     api.niveis()
-      .then(levels => setLevels(levels.map(l => ({
+      .then(ls => setLevels(ls.map(l => ({
         ...l,
         email:   l.email   ?? '',
-        // Format stored digits back into masked display
         celular: l.celular ? maskCelular(l.celular) : '',
       }))))
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
-  const updateLevel = (id: number, patch: Partial<MonitoringLevel>) => {
+  const update = (id: number, patch: Partial<MonitoringLevel>) =>
     setLevels(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
-  };
 
-  const setFieldError = (id: number, field: 'email' | 'celular', msg: string | undefined) => {
+  const setErr = (id: number, field: 'email' | 'celular', msg?: string) =>
     setErrors(prev => ({ ...prev, [id]: { ...prev[id], [field]: msg } }));
-  };
 
-  const toggleDia = (levelId: number, dia: number) => {
-    const level = levels.find(l => l.id === levelId);
-    if (!level) return;
-    const dias = level.dias_semana.includes(dia)
-      ? level.dias_semana.filter(d => d !== dia)
-      : [...level.dias_semana, dia].sort();
-    updateLevel(levelId, { dias_semana: dias });
+  const toggleDia = (id: number, dia: number) => {
+    const l = levels.find(l => l.id === id); if (!l) return;
+    update(id, { dias_semana: l.dias_semana.includes(dia) ? l.dias_semana.filter(d=>d!==dia) : [...l.dias_semana,dia].sort() });
   };
+  const addHorario    = (id: number) => { const l=levels.find(l=>l.id===id); if(!l||l.horarios.length>=5)return; update(id,{horarios:[...l.horarios,'08:00']}); };
+  const removeHorario = (id: number, i: number) => { const l=levels.find(l=>l.id===id); if(!l)return; update(id,{horarios:l.horarios.filter((_,j)=>j!==i)}); };
+  const setHorario    = (id: number, i: number, v: string) => { const l=levels.find(l=>l.id===id); if(!l)return; const h=[...l.horarios]; h[i]=v; update(id,{horarios:h}); };
 
-  const addHorario = (levelId: number) => {
-    const level = levels.find(l => l.id === levelId);
-    if (!level || level.horarios.length >= 5) return;
-    updateLevel(levelId, { horarios: [...level.horarios, '08:00'] });
+  const handleCelular = (id: number, raw: string) => {
+    const m = maskCelular(raw); update(id,{celular:m});
+    const d = m.replace(/\D/g,'');
+    setErr(id,'celular', d.length>0&&!isValidCelular(m) ? 'Informe DDD + número: (99) 99999-9999' : undefined);
   };
-
-  const removeHorario = (levelId: number, idx: number) => {
-    const level = levels.find(l => l.id === levelId);
-    if (!level) return;
-    updateLevel(levelId, { horarios: level.horarios.filter((_, i) => i !== idx) });
-  };
-
-  const setHorario = (levelId: number, idx: number, value: string) => {
-    const level = levels.find(l => l.id === levelId);
-    if (!level) return;
-    const horarios = [...level.horarios];
-    horarios[idx] = value;
-    updateLevel(levelId, { horarios });
-  };
-
-  const handleCelularChange = (id: number, raw: string) => {
-    const masked = maskCelular(raw);
-    updateLevel(id, { celular: masked });
-    const digits = masked.replace(/\D/g, '');
-    if (digits.length > 0 && !validateCelular(masked)) {
-      setFieldError(id, 'celular', 'Informe DDD + número: (99) 99999-9999');
-    } else {
-      setFieldError(id, 'celular', undefined);
-    }
-  };
-
-  const handleEmailChange = (id: number, value: string) => {
-    updateLevel(id, { email: value });
-    if (value && !validateEmail(value)) {
-      setFieldError(id, 'email', 'E-mail inválido');
-    } else {
-      setFieldError(id, 'email', undefined);
-    }
+  const handleEmail = (id: number, v: string) => {
+    update(id,{email:v});
+    setErr(id,'email', v&&!isValidEmail(v) ? 'E-mail inválido' : undefined);
   };
 
   const handleSave = async (level: MonitoringLevel) => {
-    // Client-side validation before submit
     const errs: { email?: string; celular?: string } = {};
-    if (level.email && !validateEmail(level.email)) errs.email = 'E-mail inválido';
-    if (level.celular && !validateCelular(level.celular)) errs.celular = 'Celular incompleto';
-    if (errs.email || errs.celular) {
-      setErrors(prev => ({ ...prev, [level.id]: errs }));
-      return;
-    }
-
+    if (level.email   && !isValidEmail(level.email))     errs.email   = 'E-mail inválido';
+    if (level.celular && !isValidCelular(level.celular)) errs.celular = 'Celular incompleto';
+    if (errs.email || errs.celular) { setErrors(prev=>({...prev,[level.id]:errs})); return; }
     setSaving(level.id);
     try {
-      const updated = await api.updateNivel(level.id, {
+      const u = await api.updateNivel(level.id, {
         quantidade:  level.quantidade,
         dias_semana: level.dias_semana,
         horarios:    level.horarios,
         email:       level.email,
         celular:     level.celular,
       });
-      setLevels(prev => prev.map(l => l.id === updated.id ? {
-        ...updated,
-        email:   updated.email ?? '',
-        celular: updated.celular ? maskCelular(updated.celular) : '',
-      } : l));
-      setSaved(level.id);
-      setTimeout(() => setSaved(null), 2000);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setSaving(null);
-    }
+      setLevels(prev => prev.map(l => l.id===u.id ? {...u, email:u.email??'', celular:u.celular?maskCelular(u.celular):''} : l));
+      setSaved(level.id); setTimeout(()=>setSaved(null),2000);
+    } catch(err){ console.error(err); } finally { setSaving(null); }
   };
 
-  if (loading) return (
-    <div className="content-area" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '50vh' }}>
-      <span style={{ color: 'var(--text-muted)' }}>Carregando configurações...</span>
-    </div>
-  );
+  if (loading) return <div style={{color:'var(--text-muted)',padding:'40px',textAlign:'center'}}>Carregando...</div>;
 
   return (
-    <div className="content-area">
-      <div style={{ marginBottom: '8px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
-          <Settings2 size={22} color="var(--primary)" />
-          <h1 style={{ fontSize: '1.5rem', margin: 0 }}>Monitoramento de Estoque</h1>
-        </div>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
-          Configure os 3 níveis de alerta. Cada nível define um limite de quantidade, periodicidade de verificação no AGHU e canais de notificação.
-        </p>
-      </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
+        Configure os 3 níveis de alerta. Cada nível define um limite de quantidade, periodicidade de verificação e canais de notificação.
+      </p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-        {levels.map(level => {
-          const levelErrors = errors[level.id] ?? {};
-          return (
-            <div key={level.id} className="glass-panel" style={{ padding: '24px', borderLeft: `4px solid ${level.cor}` }}>
-              {/* Level header */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-                <span style={{ width: '12px', height: '12px', borderRadius: '50%', background: level.cor, display: 'inline-block', flexShrink: 0 }} />
-                <h3 style={{ margin: 0, fontSize: '1.05rem', color: level.cor }}>{level.nome}</h3>
+      {levels.map(level => {
+        const errs = errors[level.id] ?? {};
+        return (
+          <div key={level.id} className="glass-panel" style={{ padding: '24px', borderLeft: `4px solid ${level.cor}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+              <span style={{ width:'12px', height:'12px', borderRadius:'50%', background:level.cor, display:'inline-block', flexShrink:0 }} />
+              <h3 style={{ margin:0, fontSize:'1.05rem', color:level.cor }}>{level.nome}</h3>
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'24px' }}>
+              <div>
+                <label style={{ display:'block', fontSize:'0.75rem', textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--text-muted)', marginBottom:'8px' }}>
+                  Quantidade limite (≤ aciona alerta)
+                </label>
+                <input type="number" min={0} value={level.quantidade}
+                  onChange={e=>update(level.id,{quantidade:Math.max(0,parseInt(e.target.value)||0)})}
+                  style={{ width:'100%', padding:'10px 12px', background:'var(--panel-highlight)', border:`1px solid ${level.cor}44`, borderRadius:'8px', color:'var(--text-main)', fontSize:'1rem', outline:'none', boxSizing:'border-box' }}
+                />
               </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                {/* Quantidade */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                    Quantidade limite (≤ aciona alerta)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    value={level.quantidade}
-                    onChange={e => updateLevel(level.id, { quantidade: Math.max(0, parseInt(e.target.value) || 0) })}
-                    style={{
-                      width: '100%', padding: '10px 12px',
-                      background: 'var(--panel-highlight)', border: `1px solid ${level.cor}44`,
-                      borderRadius: '8px', color: 'var(--text-main)', fontSize: '1rem',
-                      outline: 'none', boxSizing: 'border-box',
-                    }}
-                  />
-                </div>
-
-                {/* Dias da semana */}
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                    Dias da semana
-                  </label>
-                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                    {DIAS_LABELS.map((label, dia) => {
-                      const active = level.dias_semana.includes(dia);
-                      return (
-                        <button
-                          key={dia}
-                          onClick={() => toggleDia(level.id, dia)}
-                          style={{
-                            padding: '6px 10px', borderRadius: '6px', fontSize: '0.78rem', fontWeight: 600,
-                            border: `1px solid ${active ? level.cor : 'var(--panel-border)'}`,
-                            background: active ? `${level.cor}22` : 'transparent',
-                            color: active ? level.cor : 'var(--text-muted)',
-                            cursor: 'pointer', transition: 'all 0.15s',
-                          }}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
+              <div>
+                <label style={{ display:'block', fontSize:'0.75rem', textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--text-muted)', marginBottom:'8px' }}>Dias da semana</label>
+                <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                  {DIAS_LABELS.map((label,dia)=>{const active=level.dias_semana.includes(dia);return(
+                    <button key={dia} onClick={()=>toggleDia(level.id,dia)} style={{ padding:'6px 10px', borderRadius:'6px', fontSize:'0.78rem', fontWeight:600, border:`1px solid ${active?level.cor:'var(--panel-border)'}`, background:active?`${level.cor}22`:'transparent', color:active?level.cor:'var(--text-muted)', cursor:'pointer', transition:'all 0.15s' }}>{label}</button>
+                  );})}
                 </div>
               </div>
+            </div>
 
-              {/* Horários */}
-              <div style={{ marginTop: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-                  <label style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)' }}>
-                    Horários de verificação (máx. 5)
-                  </label>
-                  <button
-                    onClick={() => addHorario(level.id)}
-                    disabled={level.horarios.length >= 5}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '4px',
-                      padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 600,
-                      border: `1px solid ${level.cor}55`, background: `${level.cor}11`,
-                      color: level.cor, cursor: level.horarios.length >= 5 ? 'not-allowed' : 'pointer',
-                      opacity: level.horarios.length >= 5 ? 0.4 : 1,
-                    }}
-                  >
-                    <Plus size={12} /> Adicionar horário
-                  </button>
-                </div>
-
-                {level.horarios.length === 0 ? (
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.82rem', fontStyle: 'italic' }}>
-                    Nenhum horário configurado — monitoramento inativo.
-                  </p>
-                ) : (
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {level.horarios.map((h, idx) => (
-                      <div key={idx} style={{
-                        display: 'flex', alignItems: 'center', gap: '6px',
-                        background: 'var(--panel-highlight)', border: '1px solid var(--panel-border)',
-                        borderRadius: '8px', padding: '6px 10px',
-                      }}>
-                        <input
-                          type="time"
-                          value={h}
-                          onChange={e => setHorario(level.id, idx, e.target.value)}
-                          style={{ background: 'transparent', border: 'none', color: 'var(--text-main)', fontSize: '0.875rem', outline: 'none', cursor: 'pointer' }}
-                        />
-                        <button
-                          onClick={() => removeHorario(level.id, idx)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px', display: 'flex' }}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+            {/* Horários */}
+            <div style={{ marginTop:'20px' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
+                <label style={{ fontSize:'0.75rem', textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--text-muted)' }}>Horários de verificação (máx. 5)</label>
+                <button onClick={()=>addHorario(level.id)} disabled={level.horarios.length>=5} style={{ display:'flex', alignItems:'center', gap:'4px', padding:'4px 10px', borderRadius:'6px', fontSize:'0.75rem', fontWeight:600, border:`1px solid ${level.cor}55`, background:`${level.cor}11`, color:level.cor, cursor:level.horarios.length>=5?'not-allowed':'pointer', opacity:level.horarios.length>=5?0.4:1 }}>
+                  <Plus size={12}/> Adicionar horário
+                </button>
+              </div>
+              {level.horarios.length===0
+                ? <p style={{color:'var(--text-muted)',fontSize:'0.82rem',fontStyle:'italic'}}>Nenhum horário configurado — monitoramento inativo.</p>
+                : <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+                    {level.horarios.map((h,idx)=>(
+                      <div key={idx} style={{display:'flex',alignItems:'center',gap:'6px',background:'var(--panel-highlight)',border:'1px solid var(--panel-border)',borderRadius:'8px',padding:'6px 10px'}}>
+                        <input type="time" value={h} onChange={e=>setHorario(level.id,idx,e.target.value)} style={{background:'transparent',border:'none',color:'var(--text-main)',fontSize:'0.875rem',outline:'none',cursor:'pointer'}}/>
+                        <button onClick={()=>removeHorario(level.id,idx)} style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-muted)',padding:'2px',display:'flex'}}><Trash2 size={13}/></button>
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
+              }
+            </div>
 
-              {/* Notification contacts */}
-              <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid var(--panel-border)' }}>
-                <label style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                  Canais de notificação (opcional)
-                </label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  {/* Email */}
-                  <div>
-                    <div style={{ position: 'relative' }}>
-                      <Mail size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
-                      <input
-                        type="email"
-                        placeholder="email@exemplo.com"
-                        value={level.email}
-                        onChange={e => handleEmailChange(level.id, e.target.value)}
-                        style={{
-                          width: '100%', padding: '10px 12px 10px 36px',
-                          background: 'var(--panel-highlight)',
-                          border: `1px solid ${levelErrors.email ? '#ef4444' : 'var(--panel-border)'}`,
-                          borderRadius: '8px', color: 'var(--text-main)', fontSize: '0.875rem',
-                          outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.15s',
-                        }}
-                      />
-                    </div>
-                    {levelErrors.email && (
-                      <p style={{ color: '#ef4444', fontSize: '0.72rem', margin: '4px 0 0 2px' }}>{levelErrors.email}</p>
-                    )}
+            {/* Contacts */}
+            <div style={{ marginTop:'20px', paddingTop:'20px', borderTop:'1px solid var(--panel-border)' }}>
+              <label style={{ display:'block', fontSize:'0.75rem', textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--text-muted)', marginBottom:'12px' }}>Canais de notificação (opcional)</label>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
+                <div>
+                  <div style={{position:'relative'}}>
+                    <Mail size={15} style={{position:'absolute',left:'12px',top:'50%',transform:'translateY(-50%)',color:'var(--text-muted)',pointerEvents:'none'}}/>
+                    <input type="email" placeholder="email@exemplo.com" value={level.email} onChange={e=>handleEmail(level.id,e.target.value)}
+                      style={{width:'100%',padding:'10px 12px 10px 36px',background:'var(--panel-highlight)',border:`1px solid ${errs.email?'#ef4444':'var(--panel-border)'}`,borderRadius:'8px',color:'var(--text-main)',fontSize:'0.875rem',outline:'none',boxSizing:'border-box',transition:'border-color 0.15s'}}/>
                   </div>
-
-                  {/* Celular */}
-                  <div>
-                    <div style={{ position: 'relative' }}>
-                      <Smartphone size={15} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }} />
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="(99) 99999-9999"
-                        value={level.celular}
-                        onChange={e => handleCelularChange(level.id, e.target.value)}
-                        maxLength={16}
-                        style={{
-                          width: '100%', padding: '10px 12px 10px 36px',
-                          background: 'var(--panel-highlight)',
-                          border: `1px solid ${levelErrors.celular ? '#ef4444' : 'var(--panel-border)'}`,
-                          borderRadius: '8px', color: 'var(--text-main)', fontSize: '0.875rem',
-                          outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.15s',
-                        }}
-                      />
-                    </div>
-                    {levelErrors.celular && (
-                      <p style={{ color: '#ef4444', fontSize: '0.72rem', margin: '4px 0 0 2px' }}>{levelErrors.celular}</p>
-                    )}
+                  {errs.email && <p style={{color:'#ef4444',fontSize:'0.72rem',margin:'4px 0 0 2px'}}>{errs.email}</p>}
+                </div>
+                <div>
+                  <div style={{position:'relative'}}>
+                    <Smartphone size={15} style={{position:'absolute',left:'12px',top:'50%',transform:'translateY(-50%)',color:'var(--text-muted)',pointerEvents:'none'}}/>
+                    <input type="text" inputMode="numeric" placeholder="(99) 99999-9999" value={level.celular} onChange={e=>handleCelular(level.id,e.target.value)} maxLength={16}
+                      style={{width:'100%',padding:'10px 12px 10px 36px',background:'var(--panel-highlight)',border:`1px solid ${errs.celular?'#ef4444':'var(--panel-border)'}`,borderRadius:'8px',color:'var(--text-main)',fontSize:'0.875rem',outline:'none',boxSizing:'border-box',transition:'border-color 0.15s'}}/>
                   </div>
+                  {errs.celular && <p style={{color:'#ef4444',fontSize:'0.72rem',margin:'4px 0 0 2px'}}>{errs.celular}</p>}
                 </div>
               </div>
-
-              {/* Save button */}
-              <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'flex-end' }}>
-                <button
-                  onClick={() => handleSave(level)}
-                  disabled={saving === level.id || !!levelErrors.email || !!levelErrors.celular}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '9px 20px', borderRadius: '8px', fontWeight: 700, fontSize: '0.875rem',
-                    border: 'none',
-                    background: saved === level.id ? '#10b981' : level.cor,
-                    color: '#fff',
-                    cursor: (saving === level.id || !!levelErrors.email || !!levelErrors.celular) ? 'not-allowed' : 'pointer',
-                    opacity: (saving === level.id || !!levelErrors.email || !!levelErrors.celular) ? 0.7 : 1,
-                    transition: 'background 0.3s',
-                  }}
-                >
-                  <Save size={15} />
-                  {saving === level.id ? 'Salvando...' : saved === level.id ? 'Salvo!' : 'Salvar configurações'}
-                </button>
-              </div>
             </div>
-          );
-        })}
+
+            <div style={{marginTop:'20px',display:'flex',justifyContent:'flex-end'}}>
+              <button onClick={()=>handleSave(level)} disabled={saving===level.id||!!errs.email||!!errs.celular}
+                style={{display:'flex',alignItems:'center',gap:'6px',padding:'9px 20px',borderRadius:'8px',fontWeight:700,fontSize:'0.875rem',border:'none',background:saved===level.id?'#10b981':level.cor,color:'#fff',cursor:(saving===level.id||!!errs.email||!!errs.celular)?'not-allowed':'pointer',opacity:(saving===level.id||!!errs.email||!!errs.celular)?0.7:1,transition:'background 0.3s'}}>
+                <Save size={15}/>
+                {saving===level.id?'Salvando...':saved===level.id?'Salvo!':'Salvar configurações'}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tab 2 — Regras de Criticidade
+// ═══════════════════════════════════════════════════════════════════════════
+const TabCriticidade: React.FC = () => {
+  const [rule,    setRule]    = useState<CriticalityRule | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving,  setSaving]  = useState(false);
+  const [saved,   setSaved]   = useState(false);
+  const [error,   setError]   = useState<string | null>(null);
+
+  useEffect(() => {
+    api.criticidade()
+      .then(setRule)
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const update = (patch: Partial<CriticalityRule>) => setRule(prev => prev ? { ...prev, ...patch } : prev);
+
+  const validate = (): string | null => {
+    if (!rule) return null;
+    if (rule.limite_critico < 0) return 'Limite Crítico não pode ser negativo';
+    if (rule.limite_baixo <= rule.limite_critico) return 'Limite Baixo deve ser maior que o Crítico';
+    if (rule.limite_atencao <= rule.limite_baixo) return 'Limite Atenção deve ser maior que o Baixo';
+    return null;
+  };
+
+  const handleSave = async () => {
+    const err = validate();
+    if (err) { setError(err); return; }
+    if (!rule) return;
+    setSaving(true); setError(null);
+    try {
+      const updated = await api.updateCriticidade(rule.id, {
+        nome:           rule.nome,
+        limite_critico: rule.limite_critico,
+        limite_baixo:   rule.limite_baixo,
+        limite_atencao: rule.limite_atencao,
+      });
+      setRule(updated);
+      setSaved(true); setTimeout(() => setSaved(false), 2000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erro ao salvar');
+    } finally { setSaving(false); }
+  };
+
+  if (loading) return <div style={{color:'var(--text-muted)',padding:'40px',textAlign:'center'}}>Carregando...</div>;
+  if (!rule)   return <div style={{color:'#ef4444',padding:'40px',textAlign:'center'}}>Regra não encontrada</div>;
+
+  // Derived display ranges
+  const ranges = [
+    { key: 'critico', label: 'Crítico', desc: `Estoque de 0 até ${rule.limite_critico}` },
+    { key: 'baixo',   label: 'Baixo',   desc: `Estoque de ${rule.limite_critico + 1} até ${rule.limite_baixo}` },
+    { key: 'atencao', label: 'Atenção', desc: `Estoque de ${rule.limite_baixo + 1} até ${rule.limite_atencao}` },
+    { key: 'normal',  label: 'Normal',  desc: `Estoque acima de ${rule.limite_atencao}` },
+  ];
+
+  const inputStyle = (hasErr: boolean): React.CSSProperties => ({
+    width: '100%', padding: '10px 12px',
+    background: 'var(--panel-highlight)',
+    border: `1px solid ${hasErr ? '#ef4444' : 'var(--panel-border)'}`,
+    borderRadius: '8px', color: 'var(--text-main)', fontSize: '1rem',
+    outline: 'none', boxSizing: 'border-box',
+  });
+
+  const validationError = validate();
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
+        Defina os limites de quantidade que classificam o estoque em cada status. Esses valores são aplicados em toda a aplicação.
+      </p>
+
+      <div className="glass-panel" style={{ padding: '24px', borderLeft: '4px solid var(--primary)' }}>
+        {/* Rule name */}
+        <div style={{ marginBottom: '24px' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '8px' }}>
+            Nome da regra
+          </label>
+          <input
+            type="text"
+            value={rule.nome}
+            onChange={e => update({ nome: e.target.value })}
+            style={{ ...inputStyle(false), maxWidth: '320px' }}
+          />
+        </div>
+
+        {/* Threshold inputs */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px', marginBottom: '28px' }}>
+          {[
+            { field: 'limite_critico' as const, label: 'Limite Crítico', hint: 'Estoque ≤ este valor → Crítico', color: ALERTA_COLORS.critico },
+            { field: 'limite_baixo'   as const, label: 'Limite Baixo',   hint: 'Estoque ≤ este valor → Baixo',   color: ALERTA_COLORS.baixo   },
+            { field: 'limite_atencao' as const, label: 'Limite Atenção', hint: 'Estoque ≤ este valor → Atenção', color: ALERTA_COLORS.atencao },
+          ].map(({ field, label, hint, color }) => (
+            <div key={field}>
+              <label style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '6px', color }}>
+                {label}
+              </label>
+              <input
+                type="number" min={0}
+                value={rule[field]}
+                onChange={e => update({ [field]: Math.max(0, parseInt(e.target.value) || 0) })}
+                style={{ ...inputStyle(!!validationError), borderColor: color + '88' }}
+              />
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.72rem', margin: '4px 0 0 2px' }}>{hint}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Live preview table */}
+        <div style={{ marginBottom: '24px' }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-muted)', marginBottom: '12px' }}>
+            Prévia — como o estoque será classificado
+          </label>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+            {ranges.map(r => (
+              <div key={r.key} style={{
+                padding: '14px 16px', borderRadius: '10px',
+                background: `${ALERTA_COLORS[r.key]}14`,
+                border: `1px solid ${ALERTA_COLORS[r.key]}44`,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <ShieldAlert size={14} color={ALERTA_COLORS[r.key]} />
+                  <span style={{ fontWeight: 700, fontSize: '0.82rem', color: ALERTA_COLORS[r.key] }}>{ALERTA_LABELS[r.key]}</span>
+                </div>
+                <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>{r.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Error + Save */}
+        {error && (
+          <p style={{ color: '#ef4444', fontSize: '0.82rem', marginBottom: '12px', padding: '8px 12px', background: 'rgba(239,68,68,0.08)', borderRadius: '6px' }}>
+            {error}
+          </p>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={handleSave}
+            disabled={saving || !!validationError}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '6px',
+              padding: '9px 20px', borderRadius: '8px', fontWeight: 700, fontSize: '0.875rem',
+              border: 'none',
+              background: saved ? '#10b981' : 'var(--primary)',
+              color: 'var(--bg-dark)',
+              cursor: (saving || !!validationError) ? 'not-allowed' : 'pointer',
+              opacity: (saving || !!validationError) ? 0.7 : 1,
+              transition: 'background 0.3s',
+            }}
+          >
+            <Save size={15} />
+            {saving ? 'Salvando...' : saved ? 'Salvo!' : 'Salvar regras'}
+          </button>
+        </div>
       </div>
     </div>
   );

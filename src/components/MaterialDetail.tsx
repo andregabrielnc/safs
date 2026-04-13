@@ -78,7 +78,8 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
     : 0;
   const diasAteRuptura = mediaConsumo > 0 ? Math.round(estoque / (mediaConsumo / 30)) : null;
 
-  const alerta = estoque === 0 ? 'critico' : estoque < 10 ? 'baixo' : estoque < 20 ? 'atencao' : 'normal';
+  // alerta comes from backend (uses configured criticality thresholds)
+  const alerta = detalhe.alerta ?? (estoque === 0 ? 'critico' : 'normal');
 
   // Build chart data — Tendência only when there are enough real consumption points
   const TREND_MIN = 3;
