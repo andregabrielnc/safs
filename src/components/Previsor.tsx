@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Clock, TrendingDown } from 'lucide-react';
+import { AlertTriangle, Clock, TrendingDown, Search, Package } from 'lucide-react';
 import { api } from '../utils/api';
 import type { Material } from '../utils/api';
 import { AlertBadge } from './AlertBadge';
@@ -9,11 +9,22 @@ interface Props {
   almox: number;
 }
 
+const PAGE_SIZE = 50;
+
+function rupturaColor(dias: number | null): string {
+  if (dias === null) return 'var(--text-muted)';
+  if (dias <= 15) return '#ef4444';
+  if (dias <= 30) return '#f97316';
+  return '#f59e0b';
+}
+
 export const Previsor: React.FC<Props> = ({ almox }) => {
   const [data, setData] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -22,7 +33,6 @@ export const Previsor: React.FC<Props> = ({ almox }) => {
       setLoading(true);
       setError(null);
       try {
-        // Fetch all pages to not miss materials with imminent rupture
         const first = await api.materiais({ almox, limit: 200, page: 1 });
         if (cancelled) return;
 
@@ -55,6 +65,9 @@ export const Previsor: React.FC<Props> = ({ almox }) => {
     return () => { cancelled = true; };
   }, [almox]);
 
+  // Reset page when search changes
+  useEffect(() => { setPage(1); }, [search]);
+
   if (selected !== null) {
     return <MaterialDetail codigo={selected} almox={almox} onBack={() => setSelected(null)} />;
   }
@@ -63,53 +76,16 @@ export const Previsor: React.FC<Props> = ({ almox }) => {
   const atencao  = data.filter(m => (m.dias_ate_ruptura ?? 9999) > 15 && (m.dias_ate_ruptura ?? 9999) <= 30);
   const moderado = data.filter(m => (m.dias_ate_ruptura ?? 9999) > 30 && (m.dias_ate_ruptura ?? 9999) <= 90);
 
-  const renderGroup = (title: string, color: string, items: Material[], icon: React.ReactNode) => (
-    items.length > 0 && (
-      <div className="glass-panel" style={{ padding: '24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
-          {icon}
-          <h3 style={{ margin: 0, color }}>{title}</h3>
-          <span style={{ marginLeft: 'auto', background: `${color}22`, color, borderRadius: '999px', padding: '2px 12px', fontSize: '0.8rem', fontWeight: 700 }}>
-            {items.length} materiais
-          </span>
-        </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid var(--panel-border)' }}>
-              {['Código', 'Nome', 'Estoque', 'Consumo/mês', 'Ruptura em', 'Data Prevista', 'Status'].map(h => (
-                <th key={h} style={{ padding: '10px 12px', textAlign: 'left', color: 'var(--text-muted)', fontWeight: 600, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', whiteSpace: 'nowrap' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {items.map(m => {
-              const dataRuptura = m.dias_ate_ruptura !== null
-                ? new Date(Date.now() + m.dias_ate_ruptura * 86400000).toLocaleDateString('pt-BR')
-                : '—';
-              return (
-                <tr key={m.codigo} onClick={() => setSelected(m.codigo)}
-                  style={{ borderBottom: '1px solid var(--panel-border)', cursor: 'pointer' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--panel-highlight)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                  <td style={{ padding: '10px 12px', fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{m.codigo}</td>
-                  <td style={{ padding: '10px 12px', fontWeight: 500, maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.nome}</td>
-                  <td style={{ padding: '10px 12px', fontWeight: 700, color }}>{Number(m.estoque).toLocaleString('pt-BR')}</td>
-                  <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>
-                    {Number(m.media_consumo_mensal) > 0 ? Math.round(Number(m.media_consumo_mensal)).toLocaleString('pt-BR') : '—'}
-                  </td>
-                  <td style={{ padding: '10px 12px', fontWeight: 700, color }}>
-                    {m.dias_ate_ruptura} dias
-                  </td>
-                  <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>{dataRuptura}</td>
-                  <td style={{ padding: '10px 12px' }}><AlertBadge level={m.alerta} /></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    )
-  );
+  const searchLower = search.toLowerCase().trim();
+  const filtered = searchLower
+    ? data.filter(m =>
+        m.nome.toLowerCase().includes(searchLower) ||
+        String(m.codigo).includes(searchLower)
+      )
+    : data;
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <div className="content-area">
@@ -120,7 +96,7 @@ export const Previsor: React.FC<Props> = ({ almox }) => {
         </p>
       </div>
 
-      {/* Summary cards */}
+      {/* KPI cards */}
       <div className="kpi-grid">
         {[
           { label: 'Ruptura ≤ 15 dias',  count: loading ? '—' : urgente.length,  color: '#ef4444', icon: AlertTriangle },
@@ -145,18 +121,100 @@ export const Previsor: React.FC<Props> = ({ almox }) => {
         <div style={{ textAlign: 'center', padding: '60px', color: 'var(--text-muted)' }}>
           Analisando consumo dos materiais...
         </div>
-      ) : data.length === 0 ? (
-        <div className="glass-panel" style={{ padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
-          Nenhum material com previsão de ruptura nos próximos 90 dias.
-        </div>
       ) : (
         <>
-          {renderGroup('Urgente — Ruptura em até 15 dias', '#ef4444', urgente,
-            <AlertTriangle size={20} color="#ef4444" />)}
-          {renderGroup('Atenção — Ruptura entre 16 e 30 dias', '#f97316', atencao,
-            <Clock size={20} color="#f97316" />)}
-          {renderGroup('Monitorar — Ruptura entre 31 e 90 dias', '#f59e0b', moderado,
-            <TrendingDown size={20} color="#f59e0b" />)}
+          {/* Search + count */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+            <div style={{ position: 'relative', flex: 1, minWidth: '240px' }}>
+              <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+              <input
+                type="text"
+                placeholder="Buscar por nome ou código..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                style={{
+                  width: '100%', padding: '10px 12px 10px 38px',
+                  background: 'var(--panel-bg)', border: '1px solid var(--panel-border)',
+                  borderRadius: '10px', color: 'var(--text-main)', fontSize: '0.9rem',
+                  outline: 'none', transition: 'var(--transition-smooth)',
+                }}
+              />
+            </div>
+            <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
+              {filtered.length} {filtered.length === 1 ? 'material' : 'materiais'}
+              {searchLower ? ' encontrados' : ' em risco'}
+            </span>
+          </div>
+
+          {/* Table */}
+          <div className="glass-panel" style={{ overflow: 'hidden' }}>
+            {filtered.length === 0 ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <Package size={32} style={{ opacity: 0.3, display: 'block', margin: '0 auto 8px' }} />
+                Nenhum material encontrado para "{search}"
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid var(--panel-border)' }}>
+                      {['Código', 'Nome', 'Estoque', 'Consumo/mês', 'Ruptura em', 'Data Prevista', 'Status'].map(h => (
+                        <th key={h} style={{
+                          padding: '14px 16px', textAlign: 'left',
+                          color: 'var(--text-muted)', fontWeight: 600,
+                          fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em',
+                          whiteSpace: 'nowrap',
+                        }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginated.map(m => {
+                      const color = rupturaColor(m.dias_ate_ruptura);
+                      const dataRuptura = m.dias_ate_ruptura !== null
+                        ? new Date(Date.now() + m.dias_ate_ruptura * 86400000).toLocaleDateString('pt-BR')
+                        : '—';
+                      return (
+                        <tr key={m.codigo} onClick={() => setSelected(m.codigo)}
+                          style={{ borderBottom: '1px solid var(--panel-border)', cursor: 'pointer', transition: 'background 0.15s' }}
+                          onMouseEnter={e => (e.currentTarget.style.background = 'var(--panel-highlight)')}
+                          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+                          <td style={{ padding: '12px 16px', fontFamily: 'monospace', color: 'var(--text-muted)', fontSize: '0.8rem' }}>{m.codigo}</td>
+                          <td style={{ padding: '12px 16px', fontWeight: 500, maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.nome}</td>
+                          <td style={{ padding: '12px 16px', fontWeight: 700, color }}>{Number(m.estoque).toLocaleString('pt-BR')}</td>
+                          <td style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>
+                            {Number(m.media_consumo_mensal) > 0 ? Math.round(Number(m.media_consumo_mensal)).toLocaleString('pt-BR') : '—'}
+                          </td>
+                          <td style={{ padding: '12px 16px', fontWeight: 700, color }}>{m.dias_ate_ruptura} dias</td>
+                          <td style={{ padding: '12px 16px', color: 'var(--text-muted)' }}>{dataRuptura}</td>
+                          <td style={{ padding: '12px 16px' }}><AlertBadge level={m.alerta} /></td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', alignItems: 'center' }}>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} style={{
+                padding: '6px 14px', borderRadius: '8px', border: '1px solid var(--panel-border)',
+                background: 'var(--panel-bg)', color: 'var(--text-muted)',
+                cursor: page === 1 ? 'not-allowed' : 'pointer', opacity: page === 1 ? 0.4 : 1,
+              }}>← Anterior</button>
+              <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+                Página {page} de {totalPages}
+              </span>
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} style={{
+                padding: '6px 14px', borderRadius: '8px', border: '1px solid var(--panel-border)',
+                background: 'var(--panel-bg)', color: 'var(--text-muted)',
+                cursor: page === totalPages ? 'not-allowed' : 'pointer', opacity: page === totalPages ? 0.4 : 1,
+              }}>Próxima →</button>
+            </div>
+          )}
         </>
       )}
     </div>
