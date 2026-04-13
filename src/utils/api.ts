@@ -113,6 +113,44 @@ export interface EneContrato {
   qtde_contratada: number;
   qtde_empenhada: number;
   saldo: number;
+  monitorado: number | null; // level_id se monitorado, null caso contrário
+}
+
+export interface MonitoredContract {
+  id: number;
+  nro_af: number;
+  cpto: number;
+  mat_codigo: number;
+  mat_nome: string;
+  pregao: string;
+  fornecedor: string;
+  qtde_contratada: number;
+  level_id: number;
+  level_nome: string;
+  level_cor: string;
+  level_quantidade: number;
+  saldo_atual: number | null;
+  vencimento: string | null;
+  status_af: string | null;
+  atualizado_em: string | null;
+  alerta: 'critico' | 'baixo' | 'atencao' | 'normal' | null;
+  criado_em: string;
+}
+
+export interface ContractNotification {
+  id: number;
+  nro_af: number;
+  cpto: number;
+  mat_codigo: number;
+  mat_nome: string;
+  pregao: string;
+  fornecedor: string;
+  level_nome: string;
+  level_cor: string;
+  saldo: number;
+  quantidade: number;
+  lida: boolean;
+  criado_em: string;
 }
 
 export const api = {
@@ -217,6 +255,27 @@ export const api = {
 
   eneContratos: (codigo: number): Promise<EneContrato[]> =>
     fetch(`${BASE}/api/ene/materiais/${codigo}`).then(r => handleResponse<EneContrato[]>(r)),
+
+  eneMonitorados: (): Promise<MonitoredContract[]> =>
+    fetch(`${BASE}/api/ene/monitorados`).then(r => handleResponse<MonitoredContract[]>(r)),
+
+  monitorarContrato: (data: { nro_af: number; cpto: number; mat_codigo: number; mat_nome: string; pregao?: string; fornecedor?: string; qtde_contratada?: number; level_id: number }): Promise<{ id: number }> =>
+    fetch(`${BASE}/api/ene/monitorados`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(r => handleResponse<{ id: number }>(r)),
+
+  removerContratoMonitorado: (nro_af: number, cpto: number): Promise<{ ok: boolean }> =>
+    fetch(`${BASE}/api/ene/monitorados/${nro_af}/${cpto}`, { method: 'DELETE' })
+      .then(r => handleResponse<{ ok: boolean }>(r)),
+
+  checkNowContrato: (nro_af: number, cpto: number): Promise<{ saldo: number; triggered: boolean; alerta: string }> =>
+    fetch(`${BASE}/api/ene/monitorados/${nro_af}/${cpto}/check-now`, { method: 'POST' })
+      .then(r => handleResponse<{ saldo: number; triggered: boolean; alerta: string }>(r)),
+
+  eneNotificacoes: (): Promise<ContractNotification[]> =>
+    fetch(`${BASE}/api/ene/notificacoes`).then(r => handleResponse<ContractNotification[]>(r)),
 
   updateCriticidade: (id: number, data: Omit<CriticalityRule, 'id' | 'ativo'>): Promise<CriticalityRule> =>
     fetch(`${BASE}/api/monitoramento/criticidade/${id}`, {

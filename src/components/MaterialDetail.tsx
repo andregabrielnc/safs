@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { ArrowLeft, Package, TrendingUp, AlertTriangle, Calendar, FileText } from 'lucide-react';
+import { ArrowLeft, Package, TrendingUp, AlertTriangle, Calendar, FileText, Bell, BellOff, X } from 'lucide-react';
 import { Line } from '@ant-design/plots';
 import { api } from '../utils/api';
-import type { ConsumoMensal, MaterialDetalhe, EneContrato } from '../utils/api';
+import type { ConsumoMensal, MaterialDetalhe, EneContrato, MonitoringLevel } from '../utils/api';
 import { AlertBadge } from './AlertBadge';
 
 interface Props {
@@ -324,7 +324,13 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
       </div>
 
       <div style={{ display: activeTab === 'ene' ? 'contents' : 'none' }}>
-        <EneTab contratos={ene} umd={detalhe.umd_codigo} />
+        <EneTab
+          contratos={ene}
+          umd={detalhe.umd_codigo}
+          matCodigo={detalhe.codigo}
+          matNome={detalhe.nome}
+          onMonitorChange={() => api.eneContratos(codigo).then(setEne).catch(() => {})}
+        />
       </div>
     </div>
   );
@@ -342,79 +348,256 @@ function isAtivo(c: EneContrato) {
   return (c.status === 'A EFETIVAR' || c.status === 'PARCIAL') && new Date(c.vencimento) >= new Date();
 }
 
-function ContratoTable({ rows, muted }: { rows: EneContrato[]; muted?: boolean }) {
-  const opacity = muted ? 0.65 : 1;
+// ── Modal de monitoramento de contrato ────────────────────────────────────────
+function ContratoMonitorModal({
+  contrato, matCodigo, matNome, currentLevelId, onClose, onSave,
+}: {
+  contrato: EneContrato;
+  matCodigo: number;
+  matNome: string;
+  currentLevelId: number | null;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const [levels, setLevels] = useState<MonitoringLevel[]>([]);
+  const [selected, setSelected] = useState<number | null>(currentLevelId);
+  const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  useEffect(() => { api.niveis().then(setLevels).catch(() => {}); }, []);
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', h);
+    return () => document.removeEventListener('keydown', h);
+  }, [onClose]);
+
+  const handleSave = async () => {
+    if (!selected) return;
+    setSaving(true);
+    try {
+      await api.monitorarContrato({
+        nro_af: contrato.nro_af, cpto: contrato.cpto,
+        mat_codigo: matCodigo, mat_nome: matNome,
+        pregao: contrato.pregao, fornecedor: contrato.fornecedor,
+        qtde_contratada: contrato.qtde_contratada,
+        level_id: selected,
+      });
+      onSave(); onClose();
+    } catch (err) { console.error(err); } finally { setSaving(false); }
+  };
+
+  const handleRemove = async () => {
+    setRemoving(true);
+    try {
+      await api.removerContratoMonitorado(contrato.nro_af, contrato.cpto);
+      onSave(); onClose();
+    } catch (err) { console.error(err); } finally { setRemoving(false); }
+  };
+
   return (
-    <div style={{ overflowX: 'auto', opacity }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
-        <thead>
-          <tr style={{ borderBottom: '1px solid var(--panel-border)' }}>
-            {['Pregão', 'AF / Lote', 'Fornecedor', 'Item', 'Contratado', 'Empenhado', 'Saldo', 'Vencimento', 'Situação'].map(h => (
-              <th key={h} style={{
-                padding: '10px 14px', textAlign: 'left',
-                color: 'var(--text-muted)', fontWeight: 600,
-                fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em',
-                whiteSpace: 'nowrap',
-              }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((c, i) => {
-            const pct = c.qtde_contratada > 0 ? (c.qtde_empenhada / c.qtde_contratada) * 100 : 0;
-            const saldoColor = c.saldo <= 0 ? '#ef4444' : c.saldo < c.qtde_contratada * 0.1 ? '#f59e0b' : '#10b981';
-            const venc = new Date(c.vencimento);
-            const daysLeft = Math.round((venc.getTime() - Date.now()) / 86400000);
-            const vencColor = muted ? 'var(--text-muted)' : daysLeft < 30 ? '#ef4444' : daysLeft < 90 ? '#f59e0b' : 'var(--text-muted)';
-            const st = STATUS_LABEL[c.status] ?? { label: c.status, bg: 'rgba(100,116,139,0.15)', color: '#64748b' };
-            return (
-              <tr key={i} style={{ borderBottom: '1px solid var(--panel-border)' }}>
-                <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: muted ? 'var(--text-muted)' : 'var(--primary)', fontWeight: 600 }}>
-                  {c.pregao}
-                </td>
-                <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
-                  {c.nro_af}/{c.cpto}
-                </td>
-                <td style={{ padding: '10px 14px', maxWidth: '220px' }}>
-                  <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: muted ? 'var(--text-muted)' : undefined }}>
-                    {c.fornecedor}
+    <div onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '16px',
+    }}>
+      <div style={{
+        background: 'var(--panel-bg)', border: '1px solid var(--panel-border)',
+        borderRadius: '16px', width: '100%', maxWidth: '460px',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.5)', overflow: 'hidden',
+      }}>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--panel-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+              <Bell size={18} color="var(--primary)" />
+              <h3 style={{ margin: 0, fontSize: '1rem' }}>Monitorar Contrato ENE</h3>
+            </div>
+            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+              Pregão {contrato.pregao} · AF {contrato.nro_af}/{contrato.cpto}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px' }}>
+            <X size={18} />
+          </button>
+        </div>
+        <div style={{ padding: '24px' }}>
+          <p style={{ margin: '0 0 16px', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
+            Selecione o nível de alerta — acionado quando o saldo ficar abaixo do limite:
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {levels.map(l => (
+              <button key={l.id} onClick={() => setSelected(l.id)} style={{
+                padding: '14px 16px',
+                border: `2px solid ${selected === l.id ? l.cor : 'var(--panel-border)'}`,
+                borderRadius: '10px', background: selected === l.id ? `${l.cor}18` : 'transparent',
+                cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}>
+                <div>
+                  <div style={{ fontWeight: 700, color: l.cor, fontSize: '0.9rem' }}>{l.nome}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Aciona quando saldo ≤ {l.quantidade} unid.{' · '}{l.horarios.length} horário{l.horarios.length !== 1 ? 's' : ''}/dia
                   </div>
-                </td>
-                <td style={{ padding: '10px 14px', color: 'var(--text-muted)', textAlign: 'center' }}>{c.item}</td>
-                <td style={{ padding: '10px 14px', textAlign: 'right', color: muted ? 'var(--text-muted)' : undefined }}>
-                  {c.qtde_contratada.toLocaleString('pt-BR')}
-                </td>
-                <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                  <div style={{ color: muted ? 'var(--text-muted)' : undefined }}>{c.qtde_empenhada.toLocaleString('pt-BR')}</div>
-                  <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{pct.toFixed(0)}%</div>
-                </td>
-                <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>
-                  <span style={{ color: muted ? 'var(--text-muted)' : saldoColor }}>{c.saldo.toLocaleString('pt-BR')}</span>
-                </td>
-                <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: vencColor }}>
-                  {venc.toLocaleDateString('pt-BR')}
-                  {!muted && daysLeft < 90 && daysLeft > 0 && (
-                    <div style={{ fontSize: '0.65rem' }}>{daysLeft}d restantes</div>
-                  )}
-                  {!muted && daysLeft <= 0 && (
-                    <div style={{ fontSize: '0.65rem', color: '#ef4444' }}>Vencido</div>
-                  )}
-                </td>
-                <td style={{ padding: '10px 14px' }}>
-                  <span style={{ background: st.bg, color: st.color, borderRadius: '6px', padding: '2px 8px', fontSize: '0.7rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    {st.label}
+                </div>
+                {selected === l.id && (
+                  <span style={{ width: '18px', height: '18px', borderRadius: '50%', background: l.cor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                      <path d="M1 4l3 3 5-6" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
                   </span>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--panel-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+          <div>
+            {currentLevelId && (
+              <button onClick={handleRemove} disabled={removing} style={{
+                display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px',
+                borderRadius: '8px', fontSize: '0.82rem', border: '1px solid #ef444444',
+                background: 'transparent', color: '#ef4444', cursor: removing ? 'not-allowed' : 'pointer', opacity: removing ? 0.6 : 1,
+              }}>
+                <BellOff size={14} /> {removing ? 'Removendo...' : 'Parar monitoramento'}
+              </button>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button onClick={onClose} style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '0.875rem', border: '1px solid var(--panel-border)', background: 'transparent', color: 'var(--text-muted)', cursor: 'pointer' }}>
+              Cancelar
+            </button>
+            <button onClick={handleSave} disabled={!selected || saving} style={{
+              padding: '8px 18px', borderRadius: '8px', fontSize: '0.875rem', border: 'none',
+              background: selected ? 'var(--primary)' : 'var(--panel-border)',
+              color: selected ? 'var(--bg-dark)' : 'var(--text-muted)',
+              cursor: !selected || saving ? 'not-allowed' : 'pointer', fontWeight: 700, opacity: saving ? 0.7 : 1,
+            }}>
+              {saving ? 'Salvando...' : 'Confirmar'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function EneTab({ contratos, umd }: { contratos: EneContrato[]; umd: string }) {
+function ContratoTable({
+  rows, muted, matCodigo, matNome, onMonitorChange,
+}: {
+  rows: EneContrato[];
+  muted?: boolean;
+  matCodigo?: number;
+  matNome?: string;
+  onMonitorChange?: () => void;
+}) {
+  const [modalContrato, setModalContrato] = useState<EneContrato | null>(null);
+  const opacity = muted ? 0.65 : 1;
+
+  return (
+    <>
+      {modalContrato && matCodigo && matNome && (
+        <ContratoMonitorModal
+          contrato={modalContrato}
+          matCodigo={matCodigo}
+          matNome={matNome}
+          currentLevelId={modalContrato.monitorado ?? null}
+          onClose={() => setModalContrato(null)}
+          onSave={() => { onMonitorChange?.(); setModalContrato(null); }}
+        />
+      )}
+      <div style={{ overflowX: 'auto', opacity }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid var(--panel-border)' }}>
+              {['', 'Pregão', 'AF / Lote', 'Fornecedor', 'Item', 'Contratado', 'Empenhado', 'Saldo', 'Vencimento', 'Situação'].map(h => (
+                <th key={h} style={{
+                  padding: '10px 14px', textAlign: 'left',
+                  color: 'var(--text-muted)', fontWeight: 600,
+                  fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.05em',
+                  whiteSpace: 'nowrap',
+                }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((c, i) => {
+              const pct = c.qtde_contratada > 0 ? (c.qtde_empenhada / c.qtde_contratada) * 100 : 0;
+              const saldoColor = c.saldo <= 0 ? '#ef4444' : c.saldo < c.qtde_contratada * 0.1 ? '#f59e0b' : '#10b981';
+              const venc = new Date(c.vencimento);
+              const daysLeft = Math.round((venc.getTime() - Date.now()) / 86400000);
+              const vencColor = muted ? 'var(--text-muted)' : daysLeft < 30 ? '#ef4444' : daysLeft < 90 ? '#f59e0b' : 'var(--text-muted)';
+              const st = STATUS_LABEL[c.status] ?? { label: c.status, bg: 'rgba(100,116,139,0.15)', color: '#64748b' };
+              const isMonitored = c.monitorado != null;
+              return (
+                <tr key={i} style={{ borderBottom: '1px solid var(--panel-border)' }}>
+                  <td style={{ padding: '10px 8px 10px 14px', width: '32px' }}>
+                    {!muted && matCodigo && (
+                      <button
+                        onClick={() => setModalContrato(c)}
+                        title={isMonitored ? 'Monitorado — clique para alterar' : 'Adicionar ao monitoramento'}
+                        style={{
+                          background: isMonitored ? 'rgba(99,102,241,0.15)' : 'transparent',
+                          border: `1px solid ${isMonitored ? '#6366f1' : 'var(--panel-border)'}`,
+                          borderRadius: '6px', padding: '4px 6px', cursor: 'pointer',
+                          color: isMonitored ? '#6366f1' : 'var(--text-muted)',
+                          display: 'flex', alignItems: 'center',
+                        }}
+                      >
+                        {isMonitored ? <Bell size={12} /> : <Bell size={12} />}
+                      </button>
+                    )}
+                  </td>
+                  <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: muted ? 'var(--text-muted)' : 'var(--primary)', fontWeight: 600 }}>
+                    {c.pregao}
+                  </td>
+                  <td style={{ padding: '10px 14px', color: 'var(--text-muted)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>
+                    {c.nro_af}/{c.cpto}
+                  </td>
+                  <td style={{ padding: '10px 14px', maxWidth: '220px' }}>
+                    <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: muted ? 'var(--text-muted)' : undefined }}>
+                      {c.fornecedor}
+                    </div>
+                  </td>
+                  <td style={{ padding: '10px 14px', color: 'var(--text-muted)', textAlign: 'center' }}>{c.item}</td>
+                  <td style={{ padding: '10px 14px', textAlign: 'right', color: muted ? 'var(--text-muted)' : undefined }}>
+                    {c.qtde_contratada.toLocaleString('pt-BR')}
+                  </td>
+                  <td style={{ padding: '10px 14px', textAlign: 'right' }}>
+                    <div style={{ color: muted ? 'var(--text-muted)' : undefined }}>{c.qtde_empenhada.toLocaleString('pt-BR')}</div>
+                    <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>{pct.toFixed(0)}%</div>
+                  </td>
+                  <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>
+                    <span style={{ color: muted ? 'var(--text-muted)' : saldoColor }}>{c.saldo.toLocaleString('pt-BR')}</span>
+                  </td>
+                  <td style={{ padding: '10px 14px', whiteSpace: 'nowrap', color: vencColor }}>
+                    {venc.toLocaleDateString('pt-BR')}
+                    {!muted && daysLeft < 90 && daysLeft > 0 && (
+                      <div style={{ fontSize: '0.65rem' }}>{daysLeft}d restantes</div>
+                    )}
+                    {!muted && daysLeft <= 0 && (
+                      <div style={{ fontSize: '0.65rem', color: '#ef4444' }}>Vencido</div>
+                    )}
+                  </td>
+                  <td style={{ padding: '10px 14px' }}>
+                    <span style={{ background: st.bg, color: st.color, borderRadius: '6px', padding: '2px 8px', fontSize: '0.7rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      {st.label}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
+function EneTab({ contratos, umd, matCodigo, matNome, onMonitorChange }: {
+  contratos: EneContrato[];
+  umd: string;
+  matCodigo: number;
+  matNome: string;
+  onMonitorChange: () => void;
+}) {
   const [showHistorico, setShowHistorico] = useState(false);
 
   const ativos     = contratos.filter(c => isAtivo(c));
@@ -423,6 +606,7 @@ function EneTab({ contratos, umd }: { contratos: EneContrato[]; umd: string }) {
   const totalContratadoAtivo = ativos.reduce((s, c) => s + c.qtde_contratada, 0);
   const totalEmpenhadoAtivo  = ativos.reduce((s, c) => s + c.qtde_empenhada,  0);
   const totalSaldoAtivo      = ativos.reduce((s, c) => s + c.saldo, 0);
+  const monitoradosCount     = contratos.filter(c => c.monitorado != null).length;
 
   if (contratos.length === 0) {
     return (
@@ -435,7 +619,7 @@ function EneTab({ contratos, umd }: { contratos: EneContrato[]; umd: string }) {
 
   return (
     <>
-      {/* KPIs — baseados nos contratos ativos */}
+      {/* KPIs */}
       <div className="kpi-grid">
         <div className="glass-panel kpi-card" style={{ borderTop: '2px solid var(--primary)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -473,7 +657,12 @@ function EneTab({ contratos, umd }: { contratos: EneContrato[]; umd: string }) {
             {ativos.length}
             {historico.length > 0 && (
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginLeft: '6px' }}>
-                + {historico.length} histórico
+                + {historico.length} hist.
+              </span>
+            )}
+            {monitoradosCount > 0 && (
+              <span style={{ fontSize: '0.75rem', color: '#6366f1', marginLeft: '8px' }}>
+                <Bell size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> {monitoradosCount}
               </span>
             )}
           </div>
@@ -488,8 +677,11 @@ function EneTab({ contratos, umd }: { contratos: EneContrato[]; umd: string }) {
             <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#10b981' }}>
               Contratos Ativos
             </span>
+            <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+              Clique no sino para monitorar
+            </span>
           </div>
-          <ContratoTable rows={ativos} />
+          <ContratoTable rows={ativos} matCodigo={matCodigo} matNome={matNome} onMonitorChange={onMonitorChange} />
         </div>
       ) : (
         <div className="glass-panel" style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
