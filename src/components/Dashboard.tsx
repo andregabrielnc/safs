@@ -57,10 +57,10 @@ export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate
   );
 
   const pieData = stats ? [
-    { type: 'Crítico',  value: Number(stats.critico) },
-    { type: 'Baixo',   value: Number(stats.baixo) },
-    { type: 'Atenção', value: Number(stats.atencao) },
-    { type: 'Normal',  value: Number(stats.normal) },
+    { type: 'Crítico',  value: Number(stats.critico),  color: '#ef4444' },
+    { type: 'Baixo',    value: Number(stats.baixo),    color: '#f97316' },
+    { type: 'Atenção',  value: Number(stats.atencao),  color: '#f59e0b' },
+    { type: 'Normal',   value: Number(stats.normal),   color: '#10b981' },
   ].filter(d => d.value > 0) : [];
 
   // ── Itens Monitorados — agrupar por nível ────────────────────────────────
@@ -86,35 +86,18 @@ export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate
     }, {})
   );
 
-  const pieConfig = {
-    data: pieData,
-    angleField: 'value',
-    colorField: 'type',
-    radius: 0.75,
-    innerRadius: 0.55,
-    label: {
-      text: (d: { type: string; value: number }) =>
-        `${d.type}\n${d.value.toLocaleString('pt-BR')}`,
-      style: { fill: '#94a3b8', fontSize: 11 },
-    },
-    scale: {
-      color: { domain: ['Crítico', 'Baixo', 'Atenção', 'Normal'], range: ['#ef4444', '#f97316', '#f59e0b', '#10b981'] },
-    },
-    tooltip: {
-      items: [{ field: 'value', name: 'Materiais', valueFormatter: (v: number) => v.toLocaleString('pt-BR') }],
-    },
-  };
-
-  const makePieConfig = (data: { type: string; value: number; color: string }[]) => ({
+  const makePieConfig = (data: { type: string; value: number; color: string }[], tooltipName = 'Itens') => ({
     data,
     angleField: 'value',
     colorField: 'type',
-    radius: 0.75,
-    innerRadius: 0.55,
+    radius: 0.82,
+    innerRadius: 0.6,
     label: {
-      text: (d: { type: string; value: number }) => `${d.type}\n${d.value}`,
-      style: { fill: '#94a3b8', fontSize: 11 },
+      text: (d: { type: string; value: number }) => `${d.type}: ${d.value}`,
+      style: { fill: '#94a3b8', fontSize: 12, fontWeight: 500 },
+      position: 'outside' as const,
     },
+    legend: { color: { position: 'bottom' as const, layout: { justifyContent: 'center' } } },
     scale: {
       color: {
         domain: data.map(d => d.type),
@@ -122,7 +105,7 @@ export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate
       },
     },
     tooltip: {
-      items: [{ field: 'value', name: 'Itens' }],
+      items: [{ field: 'value', name: tooltipName }],
     },
   });
 
@@ -142,53 +125,52 @@ export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate
       </div>
 
       {/* Charts */}
-      <div className="charts-grid">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '20px' }}>
+        {/* Distribuição por Status */}
         <div className="glass-panel" style={{ padding: '24px' }}>
-          <h3 style={{ marginBottom: '20px', color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-            Distribuição por Status de Estoque
+          <h3 style={{ marginBottom: '16px', color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Distribuição por Status
           </h3>
-          <div style={{ height: '280px' }}>
-            <Pie {...pieConfig} />
+          <div style={{ height: '260px' }}>
+            <Pie {...makePieConfig(pieData, 'Materiais')} />
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Itens Monitorados */}
-          <div className="glass-panel" style={{ padding: '20px', flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <h3 style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Itens Monitorados
-              </h3>
-              <button onClick={() => onNavigate('monitorados')} style={{
-                background: 'none', border: '1px solid var(--panel-border)', borderRadius: '6px',
-                padding: '4px 10px', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.75rem',
-              }}>Ver →</button>
-            </div>
-            <div style={{ height: '120px' }}>
-              {itensPieData.length > 0
-                ? <Pie {...makePieConfig(itensPieData)} />
-                : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nenhum item monitorado</div>
-              }
-            </div>
+        {/* Itens Monitorados */}
+        <div className="glass-panel" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Itens Monitorados
+            </h3>
+            <button onClick={() => onNavigate('monitorados')} style={{
+              background: 'none', border: '1px solid var(--panel-border)', borderRadius: '6px',
+              padding: '4px 10px', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.75rem',
+            }}>Ver →</button>
           </div>
+          <div style={{ height: '260px' }}>
+            {itensPieData.length > 0
+              ? <Pie {...makePieConfig(itensPieData, 'Itens')} />
+              : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nenhum item monitorado</div>
+            }
+          </div>
+        </div>
 
-          {/* Contratos Monitorados */}
-          <div className="glass-panel" style={{ padding: '20px', flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <h3 style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Contratos Monitorados
-              </h3>
-              <button onClick={() => onNavigate('monitorados')} style={{
-                background: 'none', border: '1px solid var(--panel-border)', borderRadius: '6px',
-                padding: '4px 10px', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.75rem',
-              }}>Ver →</button>
-            </div>
-            <div style={{ height: '120px' }}>
-              {contratosPieData.length > 0
-                ? <Pie {...makePieConfig(contratosPieData)} />
-                : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nenhum contrato monitorado</div>
-              }
-            </div>
+        {/* Contratos Monitorados */}
+        <div className="glass-panel" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h3 style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Contratos Monitorados
+            </h3>
+            <button onClick={() => onNavigate('monitorados')} style={{
+              background: 'none', border: '1px solid var(--panel-border)', borderRadius: '6px',
+              padding: '4px 10px', color: 'var(--primary)', cursor: 'pointer', fontSize: '0.75rem',
+            }}>Ver →</button>
+          </div>
+          <div style={{ height: '260px' }}>
+            {contratosPieData.length > 0
+              ? <Pie {...makePieConfig(contratosPieData, 'Contratos')} />
+              : <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Nenhum contrato monitorado</div>
+            }
           </div>
         </div>
       </div>
