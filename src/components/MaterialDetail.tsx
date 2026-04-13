@@ -397,7 +397,7 @@ function ContratoMonitorModal({
   return (
     <div onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, padding: '16px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 3000, padding: '16px',
     }}>
       <div style={{
         background: 'var(--panel-bg)', border: '1px solid var(--panel-border)',
