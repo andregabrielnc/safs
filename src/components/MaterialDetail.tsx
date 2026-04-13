@@ -79,8 +79,10 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
   const consumoArr = consumo.map((c, i) => ({ x: i, y: Number(c.quantidade) }));
   const reg = linearRegression(consumoArr);
 
-  consumo.forEach((c, i) => {
+  consumo.forEach((c) => {
     chartData.push({ mes: c.competencia, valor: Number(c.quantidade), tipo: 'Consumo Real' });
+  });
+  consumo.forEach((c, i) => {
     chartData.push({ mes: c.competencia, valor: Math.max(0, Math.round(reg.slope * i + reg.intercept)), tipo: 'Tendência' });
   });
 
