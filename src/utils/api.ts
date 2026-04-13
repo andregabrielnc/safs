@@ -63,6 +63,8 @@ export interface MonitoringLevel {
   quantidade: number;
   dias_semana: number[];
   horarios: string[];
+  email: string;
+  celular: string;
 }
 
 export interface MonitoredItem {
@@ -123,7 +125,7 @@ export const api = {
   niveis: (): Promise<MonitoringLevel[]> =>
     fetch(`${BASE}/api/monitoramento/niveis`).then(r => handleResponse<MonitoringLevel[]>(r)),
 
-  updateNivel: (id: number, data: { quantidade: number; dias_semana: number[]; horarios: string[] }): Promise<MonitoringLevel> =>
+  updateNivel: (id: number, data: { quantidade: number; dias_semana: number[]; horarios: string[]; email?: string; celular?: string }): Promise<MonitoringLevel> =>
     fetch(`${BASE}/api/monitoramento/niveis/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
