@@ -1,5 +1,6 @@
 import React from 'react';
-import { LayoutDashboard, Package, BrainCircuit, Sun, Moon, Activity } from 'lucide-react';
+import { LayoutDashboard, Package, BrainCircuit, Sun, Moon, Activity, Bell } from 'lucide-react';
+import { NotificationBell } from './NotificationBell';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -13,9 +14,10 @@ interface LayoutProps {
 }
 
 const navItems = [
-  { id: 'dashboard', label: 'Dashboard',   icon: LayoutDashboard },
-  { id: 'materiais', label: 'Materiais G36', icon: Package },
-  { id: 'previsor',  label: 'Criticidade',  icon: BrainCircuit },
+  { id: 'dashboard',      label: 'Dashboard',      icon: LayoutDashboard },
+  { id: 'materiais',      label: 'Materiais G36',   icon: Package },
+  { id: 'previsor',       label: 'Criticidade',     icon: BrainCircuit },
+  { id: 'monitoramento',  label: 'Monitoramento',   icon: Bell },
 ];
 
 export const AppLayout: React.FC<LayoutProps> = ({
@@ -75,6 +77,7 @@ export const AppLayout: React.FC<LayoutProps> = ({
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <NotificationBell onNavigateMonitorados={() => onNavigate('monitorados')} />
             <button onClick={toggleTheme} style={{
               background: 'var(--panel-highlight)', border: '1px solid var(--panel-border)',
               borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer',

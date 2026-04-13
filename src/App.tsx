@@ -4,9 +4,11 @@ import { Dashboard } from './components/Dashboard';
 import { MateriaisG36 } from './components/MateriaisG36';
 import { Previsor } from './components/Previsor';
 import { MaterialDetail } from './components/MaterialDetail';
+import { Monitoramento } from './components/Monitoramento';
+import { ItensMonitorados } from './components/ItensMonitorados';
 import { api } from './utils/api';
 
-type Page = 'dashboard' | 'materiais' | 'previsor';
+type Page = 'dashboard' | 'materiais' | 'previsor' | 'monitoramento' | 'monitorados';
 
 function App() {
   const [theme, setTheme] = useState('dark');
@@ -49,6 +51,10 @@ function App() {
         return <MateriaisG36 almox={almox} />;
       case 'previsor':
         return <Previsor almox={almox} />;
+      case 'monitoramento':
+        return <Monitoramento />;
+      case 'monitorados':
+        return <ItensMonitorados almox={almox} onSelectMaterial={handleSelectMaterial} />;
     }
   };
 

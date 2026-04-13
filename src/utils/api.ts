@@ -55,6 +55,40 @@ export interface Almoxarifado {
   descricao: string;
 }
 
+export interface MonitoringLevel {
+  id: number;
+  nome: string;
+  cor: string;
+  quantidade: number;
+  dias_semana: number[];
+  horarios: string[];
+}
+
+export interface MonitoredItem {
+  id: number;
+  mat_codigo: number;
+  mat_nome: string;
+  mat_umd: string;
+  almox: number;
+  level_id: number;
+  level_nome: string;
+  level_cor: string;
+  level_quantidade: number;
+  criado_em: string;
+}
+
+export interface Notification {
+  id: number;
+  mat_codigo: number;
+  mat_nome: string;
+  level_nome: string;
+  level_cor: string;
+  estoque: number;
+  quantidade: number;
+  criado_em: string;
+  lida: number;
+}
+
 export const api = {
   stats: (almox = 1): Promise<Stats> =>
     fetch(`${BASE}/api/g36/stats?almox=${almox}`).then(r => handleResponse<Stats>(r)),
@@ -83,4 +117,39 @@ export const api = {
 
   almoxarifados: (): Promise<Almoxarifado[]> =>
     fetch(`${BASE}/api/g36/almoxarifados`).then(r => handleResponse<Almoxarifado[]>(r)),
+
+  // ── Monitoramento ───────────────────────────────────────────────────────
+  niveis: (): Promise<MonitoringLevel[]> =>
+    fetch(`${BASE}/api/monitoramento/niveis`).then(r => handleResponse<MonitoringLevel[]>(r)),
+
+  updateNivel: (id: number, data: { quantidade: number; dias_semana: number[]; horarios: string[] }): Promise<MonitoringLevel> =>
+    fetch(`${BASE}/api/monitoramento/niveis/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }).then(r => handleResponse<MonitoringLevel>(r)),
+
+  itensMonitorados: (): Promise<MonitoredItem[]> =>
+    fetch(`${BASE}/api/monitoramento/itens`).then(r => handleResponse<MonitoredItem[]>(r)),
+
+  monitorarItem: (item: { mat_codigo: number; mat_nome: string; mat_umd?: string; almox?: number; level_id: number }): Promise<{ id: number }> =>
+    fetch(`${BASE}/api/monitoramento/itens`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item),
+    }).then(r => handleResponse<{ id: number }>(r)),
+
+  removerMonitoramento: (mat_codigo: number, almox = 1): Promise<{ ok: boolean }> =>
+    fetch(`${BASE}/api/monitoramento/itens/${mat_codigo}?almox=${almox}`, { method: 'DELETE' })
+      .then(r => handleResponse<{ ok: boolean }>(r)),
+
+  notificacoes: (): Promise<Notification[]> =>
+    fetch(`${BASE}/api/monitoramento/notificacoes`).then(r => handleResponse<Notification[]>(r)),
+
+  unreadCount: (): Promise<{ total: number }> =>
+    fetch(`${BASE}/api/monitoramento/notificacoes/unread-count`).then(r => handleResponse<{ total: number }>(r)),
+
+  markAllRead: (): Promise<{ ok: boolean }> =>
+    fetch(`${BASE}/api/monitoramento/notificacoes/mark-read`, { method: 'POST' })
+      .then(r => handleResponse<{ ok: boolean }>(r)),
 };
