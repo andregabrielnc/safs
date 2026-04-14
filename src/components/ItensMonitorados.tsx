@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bell, BellOff, RefreshCw, Package, ExternalLink, FileText } from 'lucide-react';
+import { Bell, BellOff, RefreshCw, ExternalLink, FileText, Package } from 'lucide-react';
 import { api } from '../utils/api';
 import type { MonitoredItem, Notification, MonitoredContract } from '../utils/api';
 
@@ -8,36 +8,96 @@ interface Props {
   onSelectMaterial: (codigo: number) => void;
 }
 
-const ALERTA_STYLE: Record<string, { color: string; label: string }> = {
-  critico: { color: '#ef4444', label: 'Crítico' },
-  baixo:   { color: '#f59e0b', label: 'Baixo' },
-  atencao: { color: '#f97316', label: 'Atenção' },
-  normal:  { color: '#10b981', label: 'Normal' },
+// ── Design tokens alinhados ao tema shadcn ────────────────────────────────────
+const T = {
+  radius:    '10px',
+  radiusSm:  '6px',
+  border:    '1px solid var(--panel-border)',
+  bg:        'var(--panel-bg)',
+  bgSubtle:  'var(--panel-highlight)',
+  textMain:  'var(--text-main)',
+  textMuted: 'var(--text-muted)',
+  shadow:    '0 1px 3px 0 rgba(0,0,0,0.10), 0 1px 2px -1px rgba(0,0,0,0.10)',
 };
 
+const ALERTA: Record<string, { color: string; bg: string; label: string }> = {
+  critico: { color: '#ef4444', bg: 'rgba(239,68,68,0.10)',  label: 'Crítico' },
+  baixo:   { color: '#f97316', bg: 'rgba(249,115,22,0.10)', label: 'Baixo'   },
+  atencao: { color: '#f59e0b', bg: 'rgba(245,158,11,0.10)', label: 'Atenção' },
+  normal:  { color: '#10b981', bg: 'rgba(16,185,129,0.10)', label: 'Normal'  },
+};
+
+// ── Primitivos de estilo reutilizáveis ────────────────────────────────────────
+const card: React.CSSProperties = {
+  background: T.bg, border: T.border, borderRadius: T.radius,
+  boxShadow: T.shadow, padding: '16px 20px',
+};
+
+const badge = (color: string, bg: string): React.CSSProperties => ({
+  display: 'inline-flex', alignItems: 'center',
+  background: bg, color, borderRadius: '5px',
+  fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.03em',
+  padding: '2px 8px', whiteSpace: 'nowrap' as const,
+});
+
+const pill = (color: string): React.CSSProperties => ({
+  width: 8, height: 8, borderRadius: '50%',
+  background: color, flexShrink: 0, marginTop: 2,
+});
+
+const btnBase: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', gap: '5px',
+  padding: '6px 12px', borderRadius: T.radiusSm,
+  fontSize: '0.78rem', fontWeight: 500, cursor: 'pointer',
+  transition: 'all 0.15s',
+};
+
+const btnOutline = (color: string): React.CSSProperties => ({
+  ...btnBase,
+  background: 'transparent',
+  border: `1px solid ${color}55`,
+  color,
+});
+
+const btnGhost: React.CSSProperties = {
+  ...btnBase,
+  background: 'transparent',
+  border: T.border,
+  color: '#ef4444',
+};
+
+const divider: React.CSSProperties = {
+  height: 1, background: 'var(--panel-border)', margin: '12px 0',
+};
+
+const metaLabel: React.CSSProperties = {
+  fontSize: '0.68rem', color: 'var(--text-muted)', textTransform: 'uppercase' as const,
+  letterSpacing: '0.04em', marginBottom: '2px',
+};
+
+const metaValue: React.CSSProperties = {
+  fontSize: '0.82rem', fontWeight: 500, color: 'var(--text-main)',
+};
+
+// ── Componente ────────────────────────────────────────────────────────────────
 export const ItensMonitorados: React.FC<Props> = ({ almox, onSelectMaterial }) => {
   const [activeTab, setActiveTab] = useState<'itens' | 'contratos'>('itens');
 
-  // ── Itens monitorados state ────────────────────────────────────────────────
-  const [items, setItems] = useState<MonitoredItem[]>([]);
+  const [items,         setItems]         = useState<MonitoredItem[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loadingItens, setLoadingItens] = useState(true);
-  const [removing, setRemoving] = useState<number | null>(null);
-  const [checking, setChecking] = useState<number | null>(null);
+  const [loadingItens,  setLoadingItens]  = useState(true);
+  const [removing,      setRemoving]      = useState<number | null>(null);
+  const [checking,      setChecking]      = useState<number | null>(null);
 
-  // ── Contratos monitorados state ────────────────────────────────────────────
-  const [contratos, setContratos] = useState<MonitoredContract[]>([]);
-  const [loadingContratos, setLoadingContratos] = useState(true);
-  const [checkingContrato, setCheckingContrato] = useState<string | null>(null);
-  const [removingContrato, setRemovingContrato] = useState<string | null>(null);
+  const [contratos,          setContratos]          = useState<MonitoredContract[]>([]);
+  const [loadingContratos,   setLoadingContratos]   = useState(true);
+  const [checkingContrato,   setCheckingContrato]   = useState<string | null>(null);
+  const [removingContrato,   setRemovingContrato]   = useState<string | null>(null);
 
   const loadItens = () => {
     setLoadingItens(true);
     Promise.all([api.itensMonitorados(), api.notificacoes()])
-      .then(([its, notifs]) => {
-        setItems(its.filter(i => i.almox === almox));
-        setNotifications(notifs);
-      })
+      .then(([its, notifs]) => { setItems(its.filter(i => i.almox === almox)); setNotifications(notifs); })
       .catch(() => {})
       .finally(() => setLoadingItens(false));
   };
@@ -45,39 +105,32 @@ export const ItensMonitorados: React.FC<Props> = ({ almox, onSelectMaterial }) =
   const loadContratos = () => {
     setLoadingContratos(true);
     api.eneMonitorados()
-      .then(setContratos)
-      .catch(() => {})
+      .then(setContratos).catch(() => {})
       .finally(() => setLoadingContratos(false));
   };
 
   useEffect(() => { loadItens(); }, [almox]);
   useEffect(() => { loadContratos(); }, []);
 
-  // ── Itens handlers ─────────────────────────────────────────────────────────
   const handleRemove = async (mat_codigo: number) => {
     setRemoving(mat_codigo);
     await api.removerMonitoramento(mat_codigo, almox).catch(() => {});
-    setRemoving(null);
-    loadItens();
+    setRemoving(null); loadItens();
   };
 
   const handleCheckNow = async (mat_codigo: number) => {
     setChecking(mat_codigo);
     try {
-      const result = await api.checkNow(mat_codigo, almox);
-      if (result.triggered) api.notificacoes().then(setNotifications).catch(() => {});
+      const r = await api.checkNow(mat_codigo, almox);
+      if (r.triggered) api.notificacoes().then(setNotifications).catch(() => {});
     } catch {}
     setChecking(null);
   };
 
-  // ── Contratos handlers ─────────────────────────────────────────────────────
   const handleCheckContrato = async (nro_af: number, cpto: number) => {
     const key = `${nro_af}_${cpto}`;
     setCheckingContrato(key);
-    try {
-      await api.checkNowContrato(nro_af, cpto);
-      loadContratos();
-    } catch {}
+    try { await api.checkNowContrato(nro_af, cpto); loadContratos(); } catch {}
     setCheckingContrato(null);
   };
 
@@ -85,134 +138,161 @@ export const ItensMonitorados: React.FC<Props> = ({ almox, onSelectMaterial }) =
     const key = `${nro_af}_${cpto}`;
     setRemovingContrato(key);
     await api.removerContratoMonitorado(nro_af, cpto).catch(() => {});
-    setRemovingContrato(null);
-    loadContratos();
+    setRemovingContrato(null); loadContratos();
   };
 
   const notifsByMat = notifications.reduce<Record<number, Notification[]>>((acc, n) => {
-    acc[n.mat_codigo] = acc[n.mat_codigo] ?? [];
-    acc[n.mat_codigo].push(n);
-    return acc;
+    (acc[n.mat_codigo] ??= []).push(n); return acc;
   }, {});
 
-  const formatDate = (s: string) =>
+  const fmt = (s: string) =>
     new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+  const fmtDate = (s: string) => new Date(s).toLocaleDateString('pt-BR');
+
+  // ── Tab button ──────────────────────────────────────────────────────────────
+  const TabBtn = ({ id, label }: { id: 'itens' | 'contratos'; label: string }) => (
+    <button
+      onClick={() => setActiveTab(id)}
+      style={{
+        padding: '8px 18px', background: 'none', border: 'none',
+        borderBottom: activeTab === id ? '2px solid var(--primary)' : '2px solid transparent',
+        color: activeTab === id ? 'var(--primary)' : 'var(--text-muted)',
+        cursor: 'pointer', fontSize: '0.875rem', fontWeight: activeTab === id ? 600 : 400,
+        marginBottom: '-1px', transition: 'color 0.15s',
+      }}
+    >{label}</button>
+  );
+
+  // ── Empty state ─────────────────────────────────────────────────────────────
+  const Empty = ({ icon: Icon, text }: { icon: React.ElementType; text: string }) => (
+    <div style={{ ...card, padding: '60px 24px', textAlign: 'center' }}>
+      <Icon size={36} style={{ color: 'var(--text-muted)', opacity: 0.3, margin: '0 auto 12px', display: 'block' }} />
+      <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', maxWidth: 360, margin: '0 auto' }}>{text}</p>
+    </div>
+  );
+
+  // ── Loading state ───────────────────────────────────────────────────────────
+  const Loading = ({ label }: { label: string }) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '40vh' }}>
+      <span style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>{label}</span>
+    </div>
+  );
 
   return (
     <div className="content-area">
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '4px' }}>
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-            <Bell size={22} color="var(--primary)" />
-            <h1 style={{ fontSize: '1.5rem', margin: 0 }}>Monitoramento</h1>
-          </div>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', margin: 0 }}>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0, marginBottom: '4px' }}>Monitoramento</h1>
+          <p style={{ color: T.textMuted, fontSize: '0.82rem', margin: 0 }}>
             {items.length} {items.length === 1 ? 'material' : 'materiais'} · {contratos.length} {contratos.length === 1 ? 'contrato' : 'contratos'} monitorados
           </p>
         </div>
         <button
           onClick={() => { loadItens(); loadContratos(); }}
-          style={{
-            background: 'var(--panel-highlight)', border: '1px solid var(--panel-border)',
-            borderRadius: '8px', padding: '8px 14px', color: 'var(--text-muted)',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.875rem',
-          }}
+          style={{ ...btnBase, background: T.bgSubtle, border: T.border, color: T.textMuted }}
         >
-          <RefreshCw size={14} /> Atualizar
+          <RefreshCw size={13} /> Atualizar
         </button>
       </div>
 
-      {/* Tabs */}
+      {/* ── Tabs ───────────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: '4px', borderBottom: '1px solid var(--panel-border)' }}>
-        {([
-          { key: 'itens',     label: `Itens Monitorados${items.length > 0 ? ` (${items.length})` : ''}` },
-          { key: 'contratos', label: `Contratos Monitorados${contratos.length > 0 ? ` (${contratos.length})` : ''}` },
-        ] as { key: 'itens' | 'contratos'; label: string }[]).map(tab => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            style={{
-              padding: '8px 18px', background: 'none', border: 'none',
-              borderBottom: activeTab === tab.key ? '2px solid var(--primary)' : '2px solid transparent',
-              color: activeTab === tab.key ? 'var(--primary)' : 'var(--text-muted)',
-              cursor: 'pointer', fontSize: '0.875rem', fontWeight: activeTab === tab.key ? 600 : 400,
-              marginBottom: '-1px', transition: 'color 0.15s',
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+        <TabBtn id="itens"     label={`Itens Monitorados${items.length > 0 ? ` (${items.length})` : ''}`} />
+        <TabBtn id="contratos" label={`Contratos Monitorados${contratos.length > 0 ? ` (${contratos.length})` : ''}`} />
       </div>
 
-      {/* ── Aba: Itens Monitorados ── */}
+      {/* ── Aba: Itens ─────────────────────────────────────────────────────── */}
       {activeTab === 'itens' && (
-        loadingItens ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '40vh' }}>
-            <span style={{ color: 'var(--text-muted)' }}>Carregando itens monitorados...</span>
-          </div>
-        ) : items.length === 0 ? (
-          <div className="glass-panel" style={{ padding: '60px', textAlign: 'center' }}>
-            <Package size={40} style={{ color: 'var(--text-muted)', opacity: 0.3, marginBottom: '12px' }} />
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-              Nenhum material monitorado. Acesse a lista de Materiais G36 e marque materiais com o ícone de sino.
-            </p>
-          </div>
+        loadingItens ? <Loading label="Carregando itens monitorados..." /> :
+        items.length === 0 ? (
+          <Empty icon={Package} text="Nenhum material monitorado. Acesse a lista de Materiais G36 e marque com o ícone de sino." />
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {items.map(item => {
-              const itemNotifs = notifsByMat[item.mat_codigo] ?? [];
-              const unreadCount = itemNotifs.filter(n => !n.lida).length;
+              const notifs    = notifsByMat[item.mat_codigo] ?? [];
+              const unread    = notifs.filter(n => !n.lida).length;
+              const isChecking = checking === item.mat_codigo;
+              const isRemoving = removing === item.mat_codigo;
+
               return (
-                <div key={item.id} className="glass-panel" style={{ padding: '18px 20px', borderLeft: `4px solid ${item.level_cor}` }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', justifyContent: 'space-between' }}>
+                <div key={item.id} style={card}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+
+                    {/* Dot indicador */}
+                    <div style={{ ...pill(item.level_cor), marginTop: 6 }} />
+
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+                      {/* Nome + badges */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
                         <button
                           onClick={() => onSelectMaterial(item.mat_codigo)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', fontWeight: 700, fontSize: '0.9rem', padding: 0, display: 'flex', alignItems: 'center', gap: '6px' }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '5px', color: T.textMain, fontWeight: 600, fontSize: '0.875rem' }}
                         >
                           {item.mat_nome}
-                          <ExternalLink size={13} color="var(--text-muted)" />
+                          <ExternalLink size={12} style={{ color: T.textMuted, flexShrink: 0 }} />
                         </button>
-                        {unreadCount > 0 && (
-                          <span style={{ background: '#ef4444', color: '#fff', borderRadius: '999px', fontSize: '0.65rem', fontWeight: 700, padding: '1px 7px' }}>
-                            {unreadCount} alerta{unreadCount !== 1 ? 's' : ''}
+                        <span style={badge(item.level_cor, `${item.level_cor}18`)}>{item.level_nome}</span>
+                        {unread > 0 && (
+                          <span style={badge('#ef4444', 'rgba(239,68,68,0.10)')}>
+                            {unread} alerta{unread !== 1 ? 's' : ''}
                           </span>
                         )}
                       </div>
-                      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                        <span>Código: <b style={{ color: 'var(--text-main)' }}>{item.mat_codigo}</b></span>
-                        <span>Nível: <b style={{ color: item.level_cor }}>{item.level_nome}</b></span>
-                        <span>Limite: <b style={{ color: 'var(--text-main)' }}>≤ {item.level_quantidade} {item.mat_umd}</b></span>
-                        <span>Desde: {new Date(item.criado_em).toLocaleDateString('pt-BR')}</span>
-                      </div>
-                      {itemNotifs.length > 0 && (
-                        <div style={{ marginTop: '10px', padding: '8px 12px', background: 'var(--panel-highlight)', borderRadius: '8px', fontSize: '0.78rem' }}>
-                          <span style={{ color: 'var(--text-muted)' }}>Último alerta: </span>
-                          <span style={{ color: itemNotifs[0].level_cor, fontWeight: 600 }}>
-                            estoque {Number(itemNotifs[0].estoque).toLocaleString('pt-BR')} (limite {itemNotifs[0].quantidade})
-                          </span>
-                          <span style={{ color: 'var(--text-muted)' }}> em {formatDate(itemNotifs[0].criado_em)}</span>
+
+                      {/* Metadados em grid */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: '8px 20px' }}>
+                        <div>
+                          <div style={metaLabel}>Código</div>
+                          <div style={{ ...metaValue, fontFamily: 'monospace' }}>{item.mat_codigo}</div>
                         </div>
+                        <div>
+                          <div style={metaLabel}>Limite de alerta</div>
+                          <div style={{ ...metaValue, color: item.level_cor }}>≤ {item.level_quantidade} {item.mat_umd}</div>
+                        </div>
+                        <div>
+                          <div style={metaLabel}>Monitorado desde</div>
+                          <div style={metaValue}>{fmtDate(item.criado_em)}</div>
+                        </div>
+                      </div>
+
+                      {/* Último alerta */}
+                      {notifs.length > 0 && (
+                        <>
+                          <div style={divider} />
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem' }}>
+                            <Bell size={11} style={{ color: notifs[0].level_cor, flexShrink: 0 }} />
+                            <span style={{ color: T.textMuted }}>Último alerta:</span>
+                            <span style={{ color: notifs[0].level_cor, fontWeight: 600 }}>
+                              estoque {Number(notifs[0].estoque).toLocaleString('pt-BR')}
+                            </span>
+                            <span style={{ color: T.textMuted }}>· limite {notifs[0].quantidade} · {fmt(notifs[0].criado_em)}</span>
+                          </div>
+                        </>
                       )}
                     </div>
-                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+
+                    {/* Ações */}
+                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                       <button
                         onClick={() => handleCheckNow(item.mat_codigo)}
-                        disabled={checking === item.mat_codigo}
-                        style={{ padding: '7px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 600, border: `1px solid ${item.level_cor}44`, background: `${item.level_cor}11`, color: item.level_cor, cursor: checking === item.mat_codigo ? 'not-allowed' : 'pointer', opacity: checking === item.mat_codigo ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
+                        disabled={isChecking}
+                        style={{ ...btnOutline(item.level_cor), opacity: isChecking ? 0.6 : 1, cursor: isChecking ? 'not-allowed' : 'pointer' }}
+                        title="Verificar estoque agora"
                       >
-                        <Bell size={13} />
-                        {checking === item.mat_codigo ? 'Verificando...' : 'Verificar agora'}
+                        <Bell size={12} />
+                        {isChecking ? 'Verificando…' : 'Verificar'}
                       </button>
                       <button
                         onClick={() => handleRemove(item.mat_codigo)}
-                        disabled={removing === item.mat_codigo}
-                        style={{ padding: '7px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 600, border: '1px solid #ef444444', background: 'transparent', color: '#ef4444', cursor: removing === item.mat_codigo ? 'not-allowed' : 'pointer', opacity: removing === item.mat_codigo ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
+                        disabled={isRemoving}
+                        style={{ ...btnGhost, opacity: isRemoving ? 0.6 : 1, cursor: isRemoving ? 'not-allowed' : 'pointer' }}
+                        title="Parar monitoramento"
                       >
-                        <BellOff size={13} />
-                        {removing === item.mat_codigo ? 'Removendo...' : 'Parar'}
+                        <BellOff size={12} />
+                        {isRemoving ? 'Removendo…' : 'Parar'}
                       </button>
                     </div>
                   </div>
@@ -223,117 +303,141 @@ export const ItensMonitorados: React.FC<Props> = ({ almox, onSelectMaterial }) =
         )
       )}
 
-      {/* ── Aba: Contratos Monitorados ── */}
+      {/* ── Aba: Contratos ─────────────────────────────────────────────────── */}
       {activeTab === 'contratos' && (
-        loadingContratos ? (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '40vh' }}>
-            <span style={{ color: 'var(--text-muted)' }}>Carregando contratos monitorados...</span>
-          </div>
-        ) : contratos.length === 0 ? (
-          <div className="glass-panel" style={{ padding: '60px', textAlign: 'center' }}>
-            <FileText size={40} style={{ color: 'var(--text-muted)', opacity: 0.3, marginBottom: '12px', display: 'block', margin: '0 auto 12px' }} />
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-              Nenhum contrato ENE monitorado. Acesse a aba ENE em um material e clique no sino em um contrato.
-            </p>
-          </div>
+        loadingContratos ? <Loading label="Carregando contratos monitorados..." /> :
+        contratos.length === 0 ? (
+          <Empty icon={FileText} text="Nenhum contrato ENE monitorado. Acesse a aba ENE em um material e clique no sino em um contrato." />
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {contratos.map(c => {
-              const key = `${c.nro_af}_${c.cpto}`;
+              const key        = `${c.nro_af}_${c.cpto}`;
               const isChecking = checkingContrato === key;
               const isRemoving = removingContrato === key;
-              const alerta = c.alerta ?? 'normal';
-              const alertaInfo = ALERTA_STYLE[alerta] ?? ALERTA_STYLE.normal;
-              const saldoPct = c.qtde_contratada > 0 && c.saldo_atual != null
-                ? Math.round((c.saldo_atual / c.qtde_contratada) * 100)
-                : null;
-              const venc = c.vencimento ? new Date(c.vencimento) : null;
+              const alerta     = c.alerta ?? 'normal';
+              const A          = ALERTA[alerta] ?? ALERTA.normal;
+              const saldoPct   = c.qtde_contratada > 0 && c.saldo_atual != null
+                ? Math.round((c.saldo_atual / c.qtde_contratada) * 100) : null;
+              const venc     = c.vencimento ? new Date(c.vencimento) : null;
               const daysLeft = venc ? Math.round((venc.getTime() - Date.now()) / 86400000) : null;
+              const vencColor = daysLeft == null ? T.textMuted
+                : daysLeft < 30 ? '#ef4444' : daysLeft < 90 ? '#f59e0b' : T.textMuted;
 
               return (
-                <div key={c.id} className="glass-panel" style={{ padding: '18px 20px', borderLeft: `4px solid ${c.level_cor}` }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', justifyContent: 'space-between' }}>
+                <div key={c.id} style={card}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+
+                    {/* Dot indicador */}
+                    <div style={{ ...pill(c.level_cor), marginTop: 6 }} />
+
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      {/* Material + alerta */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', flexWrap: 'wrap' }}>
+
+                      {/* Nome + alerta */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' }}>
                         <button
                           onClick={() => onSelectMaterial(c.mat_codigo)}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-main)', fontWeight: 700, fontSize: '0.9rem', padding: 0, display: 'flex', alignItems: 'center', gap: '6px' }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '5px', color: T.textMain, fontWeight: 600, fontSize: '0.875rem' }}
                         >
                           {c.mat_nome}
-                          <ExternalLink size={13} color="var(--text-muted)" />
+                          <ExternalLink size={12} style={{ color: T.textMuted, flexShrink: 0 }} />
                         </button>
+                        <span style={badge(c.level_cor, `${c.level_cor}18`)}>{c.level_nome}</span>
                         {c.alerta && (
-                          <span style={{ background: `${alertaInfo.color}20`, color: alertaInfo.color, borderRadius: '6px', fontSize: '0.65rem', fontWeight: 700, padding: '1px 8px' }}>
-                            {alertaInfo.label}
-                          </span>
+                          <span style={badge(A.color, A.bg)}>{A.label}</span>
                         )}
                       </div>
 
-                      {/* Contrato info */}
-                      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                        <span>Pregão: <b style={{ color: 'var(--primary)', fontFamily: 'monospace' }}>{c.pregao}</b></span>
-                        <span>AF: <b style={{ color: 'var(--text-main)', fontFamily: 'monospace' }}>{c.nro_af}/{c.cpto}</b></span>
-                        <span>Nível: <b style={{ color: c.level_cor }}>{c.level_nome}</b></span>
-                        <span>Limite saldo: <b style={{ color: 'var(--text-main)' }}>≤ {Number(c.level_quantidade).toLocaleString('pt-BR')}</b></span>
-                        {venc && (
-                          <span style={{ color: daysLeft != null && daysLeft < 30 ? '#ef4444' : daysLeft != null && daysLeft < 90 ? '#f59e0b' : 'var(--text-muted)' }}>
-                            Vence: <b>{venc.toLocaleDateString('pt-BR')}</b>
-                            {daysLeft != null && daysLeft < 90 && ` (${daysLeft}d)`}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Saldo atual */}
-                      {c.saldo_atual != null && (
-                        <div style={{ marginTop: '10px', padding: '8px 12px', background: 'var(--panel-highlight)', borderRadius: '8px', fontSize: '0.78rem', display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
-                          <span>
-                            <span style={{ color: 'var(--text-muted)' }}>Saldo atual: </span>
-                            <b style={{ color: alertaInfo.color }}>{Number(c.saldo_atual).toLocaleString('pt-BR')}</b>
-                            {saldoPct != null && (
-                              <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem', marginLeft: '4px' }}>({saldoPct}%)</span>
-                            )}
-                          </span>
-                          <span>
-                            <span style={{ color: 'var(--text-muted)' }}>Contratado: </span>
-                            <b>{Number(c.qtde_contratada).toLocaleString('pt-BR')}</b>
-                          </span>
-                          {c.status_af && (
-                            <span>
-                              <span style={{ color: 'var(--text-muted)' }}>Status: </span>
-                              <b style={{ color: c.status_af === 'A EFETIVAR' ? '#10b981' : c.status_af === 'PARCIAL' ? '#f59e0b' : 'var(--text-muted)' }}>
-                                {c.status_af}
-                              </b>
-                            </span>
-                          )}
-                          {c.atualizado_em && (
-                            <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginLeft: 'auto' }}>
-                              Atualizado: {formatDate(c.atualizado_em)}
-                            </span>
-                          )}
+                      {/* Metadados em grid */}
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '8px 20px' }}>
+                        <div>
+                          <div style={metaLabel}>Pregão</div>
+                          <div style={{ ...metaValue, fontFamily: 'monospace', color: 'var(--primary)' }}>{c.pregao}</div>
                         </div>
+                        <div>
+                          <div style={metaLabel}>AF / Lote</div>
+                          <div style={{ ...metaValue, fontFamily: 'monospace' }}>{c.nro_af}/{c.cpto}</div>
+                        </div>
+                        <div>
+                          <div style={metaLabel}>Limite de saldo</div>
+                          <div style={{ ...metaValue, color: c.level_cor }}>≤ {Number(c.level_quantidade).toLocaleString('pt-BR')}</div>
+                        </div>
+                        {venc && (
+                          <div>
+                            <div style={metaLabel}>Vencimento</div>
+                            <div style={{ ...metaValue, color: vencColor }}>
+                              {venc.toLocaleDateString('pt-BR')}
+                              {daysLeft != null && daysLeft < 90 && (
+                                <span style={{ fontSize: '0.7rem', marginLeft: '4px', color: vencColor }}>
+                                  ({daysLeft}d)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {c.status_af && (
+                          <div>
+                            <div style={metaLabel}>Situação</div>
+                            <div style={{ ...metaValue, color: c.status_af === 'A EFETIVAR' ? '#10b981' : c.status_af === 'PARCIAL' ? '#f59e0b' : T.textMuted }}>
+                              {c.status_af}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Saldo atual + barra de progresso */}
+                      {c.saldo_atual != null && (
+                        <>
+                          <div style={divider} />
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'baseline' }}>
+                              <span style={{ fontSize: '0.68rem', color: T.textMuted }}>Saldo atual</span>
+                              <span style={{ fontSize: '0.92rem', fontWeight: 700, color: A.color }}>
+                                {Number(c.saldo_atual).toLocaleString('pt-BR')}
+                              </span>
+                              {saldoPct != null && (
+                                <span style={{ fontSize: '0.68rem', color: T.textMuted }}>({saldoPct}%)</span>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', gap: '4px', alignItems: 'baseline' }}>
+                              <span style={{ fontSize: '0.68rem', color: T.textMuted }}>Contratado</span>
+                              <span style={{ fontSize: '0.82rem', fontWeight: 500 }}>{Number(c.qtde_contratada).toLocaleString('pt-BR')}</span>
+                            </div>
+                            {saldoPct != null && (
+                              <div style={{ flex: 1, minWidth: 100 }}>
+                                <div style={{ height: 4, borderRadius: 99, background: 'var(--panel-highlight)', overflow: 'hidden' }}>
+                                  <div style={{ height: '100%', width: `${Math.min(100, Math.max(0, saldoPct))}%`, background: A.color, borderRadius: 99, transition: 'width 0.4s' }} />
+                                </div>
+                              </div>
+                            )}
+                            {c.atualizado_em && (
+                              <span style={{ fontSize: '0.68rem', color: T.textMuted, marginLeft: 'auto' }}>
+                                Atualizado {fmt(c.atualizado_em)}
+                              </span>
+                            )}
+                          </div>
+                        </>
                       )}
                     </div>
 
-                    {/* Actions */}
-                    <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+                    {/* Ações */}
+                    <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                       <button
                         onClick={() => handleCheckContrato(c.nro_af, c.cpto)}
                         disabled={isChecking}
+                        style={{ ...btnOutline(c.level_cor), opacity: isChecking ? 0.6 : 1, cursor: isChecking ? 'not-allowed' : 'pointer' }}
                         title="Verificar saldo agora"
-                        style={{ padding: '7px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 600, border: `1px solid ${c.level_cor}44`, background: `${c.level_cor}11`, color: c.level_cor, cursor: isChecking ? 'not-allowed' : 'pointer', opacity: isChecking ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
                       >
-                        <Bell size={13} />
-                        {isChecking ? 'Verificando...' : 'Verificar agora'}
+                        <Bell size={12} />
+                        {isChecking ? 'Verificando…' : 'Verificar'}
                       </button>
                       <button
                         onClick={() => handleRemoveContrato(c.nro_af, c.cpto)}
                         disabled={isRemoving}
+                        style={{ ...btnGhost, opacity: isRemoving ? 0.6 : 1, cursor: isRemoving ? 'not-allowed' : 'pointer' }}
                         title="Parar monitoramento"
-                        style={{ padding: '7px 12px', borderRadius: '8px', fontSize: '0.78rem', fontWeight: 600, border: '1px solid #ef444444', background: 'transparent', color: '#ef4444', cursor: isRemoving ? 'not-allowed' : 'pointer', opacity: isRemoving ? 0.6 : 1, display: 'flex', alignItems: 'center', gap: '4px' }}
                       >
-                        <BellOff size={13} />
-                        {isRemoving ? 'Removendo...' : 'Parar'}
+                        <BellOff size={12} />
+                        {isRemoving ? 'Removendo…' : 'Parar'}
                       </button>
                     </div>
                   </div>
@@ -343,6 +447,7 @@ export const ItensMonitorados: React.FC<Props> = ({ almox, onSelectMaterial }) =
           </div>
         )
       )}
+
     </div>
   );
 };
