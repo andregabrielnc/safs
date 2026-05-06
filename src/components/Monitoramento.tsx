@@ -1,23 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Save, Settings2, Mail, Smartphone, ShieldAlert } from 'lucide-react';
+import { Plus, Trash2, Save, Settings2, ShieldAlert } from 'lucide-react';
 import { api } from '../utils/api';
 import type { MonitoringLevel, CriticalityRule } from '../utils/api';
 
 const DIAS_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 type Tab = 'monitoramento' | 'criticidade';
-
-// ── Phone mask ───────────────────────────────────────────────────────────────
-function maskCelular(raw: string): string {
-  const d = raw.replace(/\D/g, '').slice(0, 11);
-  if (d.length === 0) return '';
-  if (d.length <= 2)  return `(${d}`;
-  if (d.length <= 6)  return `(${d.slice(0,2)}) ${d.slice(2)}`;
-  if (d.length <= 10) return `(${d.slice(0,2)}) ${d.slice(2,6)}-${d.slice(6)}`;
-  return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
-}
-const isValidCelular = (v: string) => { const d = v.replace(/\D/g,''); return d.length===10||d.length===11; };
-const isValidEmail   = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
 // ── Criticidade helpers ──────────────────────────────────────────────────────
 const ALERTA_COLORS: Record<string, string> = {
@@ -77,24 +65,16 @@ const TabMonitoramento: React.FC = () => {
   const [loading, setLoading]  = useState(true);
   const [saving,  setSaving]   = useState<number | null>(null);
   const [saved,   setSaved]    = useState<number | null>(null);
-  const [errors,  setErrors]   = useState<Record<number, { email?: string; celular?: string }>>({});
 
   useEffect(() => {
     api.niveis()
-      .then(ls => setLevels(ls.map(l => ({
-        ...l,
-        email:   l.email   ?? '',
-        celular: l.celular ? maskCelular(l.celular) : '',
-      }))))
+      .then(setLevels)
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 
   const update = (id: number, patch: Partial<MonitoringLevel>) =>
     setLevels(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
-
-  const setErr = (id: number, field: 'email' | 'celular', msg?: string) =>
-    setErrors(prev => ({ ...prev, [id]: { ...prev[id], [field]: msg } }));
 
   const toggleDia = (id: number, dia: number) => {
     const l = levels.find(l => l.id === id); if (!l) return;
@@ -104,31 +84,15 @@ const TabMonitoramento: React.FC = () => {
   const removeHorario = (id: number, i: number) => { const l=levels.find(l=>l.id===id); if(!l)return; update(id,{horarios:l.horarios.filter((_,j)=>j!==i)}); };
   const setHorario    = (id: number, i: number, v: string) => { const l=levels.find(l=>l.id===id); if(!l)return; const h=[...l.horarios]; h[i]=v; update(id,{horarios:h}); };
 
-  const handleCelular = (id: number, raw: string) => {
-    const m = maskCelular(raw); update(id,{celular:m});
-    const d = m.replace(/\D/g,'');
-    setErr(id,'celular', d.length>0&&!isValidCelular(m) ? 'Informe DDD + número: (99) 99999-9999' : undefined);
-  };
-  const handleEmail = (id: number, v: string) => {
-    update(id,{email:v});
-    setErr(id,'email', v&&!isValidEmail(v) ? 'E-mail inválido' : undefined);
-  };
-
   const handleSave = async (level: MonitoringLevel) => {
-    const errs: { email?: string; celular?: string } = {};
-    if (level.email   && !isValidEmail(level.email))     errs.email   = 'E-mail inválido';
-    if (level.celular && !isValidCelular(level.celular)) errs.celular = 'Celular incompleto';
-    if (errs.email || errs.celular) { setErrors(prev=>({...prev,[level.id]:errs})); return; }
     setSaving(level.id);
     try {
       const u = await api.updateNivel(level.id, {
         quantidade:  level.quantidade,
         dias_semana: level.dias_semana,
         horarios:    level.horarios,
-        email:       level.email,
-        celular:     level.celular,
       });
-      setLevels(prev => prev.map(l => l.id===u.id ? {...u, email:u.email??'', celular:u.celular?maskCelular(u.celular):''} : l));
+      setLevels(prev => prev.map(l => l.id===u.id ? u : l));
       setSaved(level.id); setTimeout(()=>setSaved(null),2000);
     } catch(err){ console.error(err); } finally { setSaving(null); }
   };
@@ -142,7 +106,6 @@ const TabMonitoramento: React.FC = () => {
       </p>
 
       {levels.map(level => {
-        const errs = errors[level.id] ?? {};
         return (
           <div key={level.id} className="glass-panel" style={{ padding: '24px', borderLeft: `4px solid ${level.cor}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
@@ -191,32 +154,12 @@ const TabMonitoramento: React.FC = () => {
               }
             </div>
 
-            {/* Contacts */}
-            <div style={{ marginTop:'20px', paddingTop:'20px', borderTop:'1px solid var(--panel-border)' }}>
-              <label style={{ display:'block', fontSize:'0.75rem', textTransform:'uppercase', letterSpacing:'0.05em', color:'var(--text-muted)', marginBottom:'12px' }}>Canais de notificação (opcional)</label>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'16px' }}>
-                <div>
-                  <div style={{position:'relative'}}>
-                    <Mail size={15} style={{position:'absolute',left:'12px',top:'50%',transform:'translateY(-50%)',color:'var(--text-muted)',pointerEvents:'none'}}/>
-                    <input type="email" placeholder="email@exemplo.com" value={level.email} onChange={e=>handleEmail(level.id,e.target.value)}
-                      style={{width:'100%',padding:'10px 12px 10px 36px',background:'var(--panel-highlight)',border:`1px solid ${errs.email?'#ef4444':'var(--panel-border)'}`,borderRadius:'8px',color:'var(--text-main)',fontSize:'0.875rem',outline:'none',boxSizing:'border-box',transition:'border-color 0.15s'}}/>
-                  </div>
-                  {errs.email && <p style={{color:'#ef4444',fontSize:'0.72rem',margin:'4px 0 0 2px'}}>{errs.email}</p>}
-                </div>
-                <div>
-                  <div style={{position:'relative'}}>
-                    <Smartphone size={15} style={{position:'absolute',left:'12px',top:'50%',transform:'translateY(-50%)',color:'var(--text-muted)',pointerEvents:'none'}}/>
-                    <input type="text" inputMode="numeric" placeholder="(99) 99999-9999" value={level.celular} onChange={e=>handleCelular(level.id,e.target.value)} maxLength={16}
-                      style={{width:'100%',padding:'10px 12px 10px 36px',background:'var(--panel-highlight)',border:`1px solid ${errs.celular?'#ef4444':'var(--panel-border)'}`,borderRadius:'8px',color:'var(--text-main)',fontSize:'0.875rem',outline:'none',boxSizing:'border-box',transition:'border-color 0.15s'}}/>
-                  </div>
-                  {errs.celular && <p style={{color:'#ef4444',fontSize:'0.72rem',margin:'4px 0 0 2px'}}>{errs.celular}</p>}
-                </div>
-              </div>
-            </div>
-
-            <div style={{marginTop:'20px',display:'flex',justifyContent:'flex-end'}}>
-              <button onClick={()=>handleSave(level)} disabled={saving===level.id||!!errs.email||!!errs.celular}
-                style={{display:'flex',alignItems:'center',gap:'6px',padding:'9px 20px',borderRadius:'8px',fontWeight:700,fontSize:'0.875rem',border:'none',background:saved===level.id?'#10b981':level.cor,color:'#fff',cursor:(saving===level.id||!!errs.email||!!errs.celular)?'not-allowed':'pointer',opacity:(saving===level.id||!!errs.email||!!errs.celular)?0.7:1,transition:'background 0.3s'}}>
+            <div style={{marginTop:'20px',paddingTop:'20px',borderTop:'1px solid var(--panel-border)',display:'flex',justifyContent:'space-between',alignItems:'center',gap:'12px',flexWrap:'wrap'}}>
+              <p style={{margin:0,fontSize:'0.78rem',color:'var(--text-muted)'}}>
+                Os alertas aparecem no sino de notificações no topo. Envio por e-mail e SMS ainda não está disponível.
+              </p>
+              <button onClick={()=>handleSave(level)} disabled={saving===level.id}
+                style={{display:'flex',alignItems:'center',gap:'6px',padding:'9px 20px',borderRadius:'8px',fontWeight:700,fontSize:'0.875rem',border:'none',background:saved===level.id?'#10b981':level.cor,color:'#fff',cursor:saving===level.id?'not-allowed':'pointer',opacity:saving===level.id?0.7:1,transition:'background 0.3s'}}>
                 <Save size={15}/>
                 {saving===level.id?'Salvando...':saved===level.id?'Salvo!':'Salvar configurações'}
               </button>

@@ -1,5 +1,52 @@
 const BASE = import.meta.env.VITE_API_URL ?? '';
 
+const TOKEN_KEY = 'safs_auth_token';
+const USER_KEY  = 'safs_auth_user';
+
+export interface AuthUser {
+  username: string;
+  name: string;
+  email: string;
+}
+
+export const auth = {
+  getToken(): string | null { return localStorage.getItem(TOKEN_KEY); },
+  getUser(): AuthUser | null {
+    try { const v = localStorage.getItem(USER_KEY); return v ? JSON.parse(v) : null; }
+    catch { return null; }
+  },
+  setSession(token: string, user: AuthUser) {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  },
+  clear() {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+  },
+};
+
+let onUnauthorized: (() => void) | null = null;
+export function setOnUnauthorized(fn: () => void) { onUnauthorized = fn; }
+
+function authHeaders(): Record<string, string> {
+  const t = auth.getToken();
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
+function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  const headers: Record<string, string> = {
+    ...(init.headers as Record<string, string> | undefined),
+    ...authHeaders(),
+  };
+  return fetch(input, { ...init, headers }).then(r => {
+    if (r.status === 401) {
+      auth.clear();
+      if (onUnauthorized) onUnauthorized();
+    }
+    return r;
+  });
+}
+
 async function handleResponse<T>(r: Response): Promise<T> {
   if (!r.ok) throw new Error(`Erro na API: ${r.status} ${r.statusText}`);
   return r.json();
@@ -73,8 +120,6 @@ export interface MonitoringLevel {
   quantidade: number;
   dias_semana: number[];
   horarios: string[];
-  email: string;
-  celular: string;
 }
 
 export interface MonitoredItem {
@@ -154,8 +199,27 @@ export interface ContractNotification {
 }
 
 export const api = {
+  // ── Auth ────────────────────────────────────────────────────────────────
+  login: async (username: string, password: string): Promise<{ token: string; user: AuthUser }> => {
+    const r = await fetch(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!r.ok) {
+      const body = await r.json().catch(() => ({}));
+      throw new Error(body.error || `Erro ${r.status}`);
+    }
+    const data = await r.json();
+    auth.setSession(data.token, data.user);
+    return data;
+  },
+  logout: () => { auth.clear(); },
+  me: (): Promise<{ user: AuthUser }> =>
+    apiFetch(`${BASE}/api/auth/me`).then(r => handleResponse<{ user: AuthUser }>(r)),
+
   stats: (almox = 1): Promise<Stats> =>
-    fetch(`${BASE}/api/g36/stats?almox=${almox}`).then(r => handleResponse<Stats>(r)),
+    apiFetch(`${BASE}/api/g36/stats?almox=${almox}`).then(r => handleResponse<Stats>(r)),
 
   materiais: (params: {
     page?: number; limit?: number; search?: string; almox?: number; alerta?: string; contrato?: string;
@@ -168,118 +232,118 @@ export const api = {
       ...(params.alerta && params.alerta !== 'todos' ? { alerta: params.alerta } : {}),
       ...(params.contrato ? { contrato: params.contrato } : {}),
     });
-    return fetch(`${BASE}/api/g36/materiais?${qs}`).then(r => handleResponse<MateriaisResponse>(r));
+    return apiFetch(`${BASE}/api/g36/materiais?${qs}`).then(r => handleResponse<MateriaisResponse>(r));
   },
 
   ruptura: (almox = 1, dias = 90): Promise<Material[]> =>
-    fetch(`${BASE}/api/g36/ruptura?almox=${almox}&dias=${dias}`).then(r => handleResponse<Material[]>(r)),
+    apiFetch(`${BASE}/api/g36/ruptura?almox=${almox}&dias=${dias}`).then(r => handleResponse<Material[]>(r)),
 
   material: (codigo: number, almox = 1): Promise<MaterialDetalhe> =>
-    fetch(`${BASE}/api/g36/materiais/${codigo}?almox=${almox}`).then(r => handleResponse<MaterialDetalhe>(r)),
+    apiFetch(`${BASE}/api/g36/materiais/${codigo}?almox=${almox}`).then(r => handleResponse<MaterialDetalhe>(r)),
 
   consumo: (codigo: number, almox = 1, meses = 24): Promise<ConsumoMensal[]> =>
-    fetch(`${BASE}/api/g36/materiais/${codigo}/consumo?almox=${almox}&meses=${meses}`).then(r => handleResponse<ConsumoMensal[]>(r)),
+    apiFetch(`${BASE}/api/g36/materiais/${codigo}/consumo?almox=${almox}&meses=${meses}`).then(r => handleResponse<ConsumoMensal[]>(r)),
 
   almoxarifados: (): Promise<Almoxarifado[]> =>
-    fetch(`${BASE}/api/g36/almoxarifados`).then(r => handleResponse<Almoxarifado[]>(r)),
+    apiFetch(`${BASE}/api/g36/almoxarifados`).then(r => handleResponse<Almoxarifado[]>(r)),
 
   // ── Monitoramento ───────────────────────────────────────────────────────
   niveis: (): Promise<MonitoringLevel[]> =>
-    fetch(`${BASE}/api/monitoramento/niveis`).then(r => handleResponse<MonitoringLevel[]>(r)),
+    apiFetch(`${BASE}/api/monitoramento/niveis`).then(r => handleResponse<MonitoringLevel[]>(r)),
 
-  updateNivel: (id: number, data: { quantidade: number; dias_semana: number[]; horarios: string[]; email?: string; celular?: string }): Promise<MonitoringLevel> =>
-    fetch(`${BASE}/api/monitoramento/niveis/${id}`, {
+  updateNivel: (id: number, data: { quantidade: number; dias_semana: number[]; horarios: string[] }): Promise<MonitoringLevel> =>
+    apiFetch(`${BASE}/api/monitoramento/niveis/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }).then(r => handleResponse<MonitoringLevel>(r)),
 
   itensMonitorados: (): Promise<MonitoredItem[]> =>
-    fetch(`${BASE}/api/monitoramento/itens`).then(r => handleResponse<MonitoredItem[]>(r)),
+    apiFetch(`${BASE}/api/monitoramento/itens`).then(r => handleResponse<MonitoredItem[]>(r)),
 
   monitorarItem: (item: { mat_codigo: number; mat_nome: string; mat_umd?: string; almox?: number; level_id: number }): Promise<{ id: number }> =>
-    fetch(`${BASE}/api/monitoramento/itens`, {
+    apiFetch(`${BASE}/api/monitoramento/itens`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(item),
     }).then(r => handleResponse<{ id: number }>(r)),
 
   removerMonitoramento: (mat_codigo: number, almox = 1): Promise<{ ok: boolean }> =>
-    fetch(`${BASE}/api/monitoramento/itens/${mat_codigo}?almox=${almox}`, { method: 'DELETE' })
+    apiFetch(`${BASE}/api/monitoramento/itens/${mat_codigo}?almox=${almox}`, { method: 'DELETE' })
       .then(r => handleResponse<{ ok: boolean }>(r)),
 
   notificacoes: (): Promise<Notification[]> =>
-    fetch(`${BASE}/api/monitoramento/notificacoes`).then(r => handleResponse<Notification[]>(r)),
+    apiFetch(`${BASE}/api/monitoramento/notificacoes`).then(r => handleResponse<Notification[]>(r)),
 
   unreadCount: (): Promise<{ total: number }> =>
-    fetch(`${BASE}/api/monitoramento/notificacoes/unread-count`).then(r => handleResponse<{ total: number }>(r)),
+    apiFetch(`${BASE}/api/monitoramento/notificacoes/unread-count`).then(r => handleResponse<{ total: number }>(r)),
 
   markAllRead: (): Promise<{ ok: boolean }> =>
-    fetch(`${BASE}/api/monitoramento/notificacoes/mark-read`, { method: 'POST' })
+    apiFetch(`${BASE}/api/monitoramento/notificacoes/mark-read`, { method: 'POST' })
       .then(r => handleResponse<{ ok: boolean }>(r)),
 
   checkNow: (mat_codigo: number, almox = 1): Promise<{ estoque: number; triggered: boolean }> =>
-    fetch(`${BASE}/api/monitoramento/itens/${mat_codigo}/check-now?almox=${almox}`, { method: 'POST' })
+    apiFetch(`${BASE}/api/monitoramento/itens/${mat_codigo}/check-now?almox=${almox}`, { method: 'POST' })
       .then(r => handleResponse<{ estoque: number; triggered: boolean }>(r)),
 
   statsSnapshot: (almox = 1): Promise<{ ok: boolean }> =>
-    fetch(`${BASE}/api/monitoramento/stats/snapshot`, {
+    apiFetch(`${BASE}/api/monitoramento/stats/snapshot`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ almox }),
     }).then(r => handleResponse<{ ok: boolean }>(r)),
 
   statsHistorico: (almox = 1, dias = 30): Promise<{ dia: string; total_materiais: number; critico: number; baixo: number; atencao: number; normal: number }[]> =>
-    fetch(`${BASE}/api/monitoramento/stats/historico?almox=${almox}&dias=${dias}`)
+    apiFetch(`${BASE}/api/monitoramento/stats/historico?almox=${almox}&dias=${dias}`)
       .then(r => handleResponse(r)),
 
   registrarAcesso: (mat_codigo: number, mat_nome: string, almox = 1): Promise<{ ok: boolean }> =>
-    fetch(`${BASE}/api/monitoramento/acesso`, {
+    apiFetch(`${BASE}/api/monitoramento/acesso`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mat_codigo, mat_nome, almox }),
     }).then(r => handleResponse<{ ok: boolean }>(r)),
 
   registrarBusca: (termo: string, almox = 1, resultados?: number): Promise<{ ok: boolean }> =>
-    fetch(`${BASE}/api/monitoramento/busca`, {
+    apiFetch(`${BASE}/api/monitoramento/busca`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ termo, almox, resultados }),
     }).then(r => handleResponse<{ ok: boolean }>(r)),
 
   recorrentes: (almox = 1, limit = 20): Promise<{ itens: { mat_codigo: number; mat_nome: string; total_acessos: number; ultimo_acesso: string }[]; buscas: { termo: string; total_buscas: number; ultima_busca: string }[] }> =>
-    fetch(`${BASE}/api/monitoramento/recorrentes?almox=${almox}&limit=${limit}`)
+    apiFetch(`${BASE}/api/monitoramento/recorrentes?almox=${almox}&limit=${limit}`)
       .then(r => handleResponse(r)),
 
   criticidade: (): Promise<CriticalityRule> =>
-    fetch(`${BASE}/api/monitoramento/criticidade`).then(r => handleResponse<CriticalityRule>(r)),
+    apiFetch(`${BASE}/api/monitoramento/criticidade`).then(r => handleResponse<CriticalityRule>(r)),
 
   eneContratos: (codigo: number): Promise<EneContrato[]> =>
-    fetch(`${BASE}/api/ene/materiais/${codigo}`).then(r => handleResponse<EneContrato[]>(r)),
+    apiFetch(`${BASE}/api/ene/materiais/${codigo}`).then(r => handleResponse<EneContrato[]>(r)),
 
   eneMonitorados: (): Promise<MonitoredContract[]> =>
-    fetch(`${BASE}/api/ene/monitorados`).then(r => handleResponse<MonitoredContract[]>(r)),
+    apiFetch(`${BASE}/api/ene/monitorados`).then(r => handleResponse<MonitoredContract[]>(r)),
 
   monitorarContrato: (data: { nro_af: number; cpto: number; mat_codigo: number; mat_nome: string; pregao?: string; fornecedor?: string; qtde_contratada?: number; level_id: number }): Promise<{ id: number }> =>
-    fetch(`${BASE}/api/ene/monitorados`, {
+    apiFetch(`${BASE}/api/ene/monitorados`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     }).then(r => handleResponse<{ id: number }>(r)),
 
   removerContratoMonitorado: (nro_af: number, cpto: number): Promise<{ ok: boolean }> =>
-    fetch(`${BASE}/api/ene/monitorados/${nro_af}/${cpto}`, { method: 'DELETE' })
+    apiFetch(`${BASE}/api/ene/monitorados/${nro_af}/${cpto}`, { method: 'DELETE' })
       .then(r => handleResponse<{ ok: boolean }>(r)),
 
   checkNowContrato: (nro_af: number, cpto: number): Promise<{ saldo: number; triggered: boolean; alerta: string }> =>
-    fetch(`${BASE}/api/ene/monitorados/${nro_af}/${cpto}/check-now`, { method: 'POST' })
+    apiFetch(`${BASE}/api/ene/monitorados/${nro_af}/${cpto}/check-now`, { method: 'POST' })
       .then(r => handleResponse<{ saldo: number; triggered: boolean; alerta: string }>(r)),
 
   eneNotificacoes: (): Promise<ContractNotification[]> =>
-    fetch(`${BASE}/api/ene/notificacoes`).then(r => handleResponse<ContractNotification[]>(r)),
+    apiFetch(`${BASE}/api/ene/notificacoes`).then(r => handleResponse<ContractNotification[]>(r)),
 
   updateCriticidade: (id: number, data: Omit<CriticalityRule, 'id' | 'ativo'>): Promise<CriticalityRule> =>
-    fetch(`${BASE}/api/monitoramento/criticidade/${id}`, {
+    apiFetch(`${BASE}/api/monitoramento/criticidade/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),

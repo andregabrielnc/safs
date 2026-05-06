@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Package, AlertTriangle, CheckCircle, Clock, Activity } from 'lucide-react';
 import { Pie } from '@ant-design/plots';
 import { api } from '../utils/api';
-import type { Stats, Material, MonitoredItem, MonitoredContract } from '../utils/api';
+import type { Stats, Material, MonitoredItem, MonitoredContract, CriticalityRule } from '../utils/api';
 import { KPICard } from './KPICard';
 import { AlertBadge } from './AlertBadge';
 
@@ -14,6 +14,7 @@ interface Props {
 
 export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate }) => {
   const [stats, setStats] = useState<Stats | null>(null);
+  const [rule, setRule] = useState<CriticalityRule | null>(null);
   const [criticos, setCriticos] = useState<Material[]>([]);
   const [itensMonitorados, setItensMonitorados] = useState<MonitoredItem[]>([]);
   const [contratosMonitorados, setContratosMonitorados] = useState<MonitoredContract[]>([]);
@@ -25,16 +26,19 @@ export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate
       setLoading(true);
       setError(null);
       try {
-        const [s, mat, itens, contratos] = await Promise.all([
+        const [s, criticosResp, baixosResp, itens, contratos, r] = await Promise.all([
           api.stats(almox),
-          api.materiais({ almox, limit: 60, page: 1 }),
+          api.materiais({ almox, limit: 30, page: 1, alerta: 'critico' }),
+          api.materiais({ almox, limit: 30, page: 1, alerta: 'baixo' }),
           api.itensMonitorados(),
           api.eneMonitorados(),
+          api.criticidade().catch(() => null),
         ]);
         setStats(s);
-        setCriticos(mat.data.filter(m => m.alerta === 'critico' || m.alerta === 'baixo'));
+        setCriticos([...criticosResp.data, ...baixosResp.data]);
         setItensMonitorados(itens);
         setContratosMonitorados(contratos);
+        setRule(r);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Erro ao carregar dashboard');
       } finally {
@@ -119,9 +123,21 @@ export const Dashboard: React.FC<Props> = ({ almox, onSelectMaterial, onNavigate
       {/* KPIs */}
       <div className="kpi-grid">
         <KPICard title="Total de Materiais" value={Number(stats?.total_materiais ?? 0).toLocaleString('pt-BR')} icon={Package} />
-        <KPICard title="Estoque Crítico (= 0)" value={Number(stats?.critico ?? 0).toLocaleString('pt-BR')} icon={AlertTriangle} />
-        <KPICard title="Estoque Baixo (< 10)" value={Number(stats?.baixo ?? 0).toLocaleString('pt-BR')} icon={Clock} />
-        <KPICard title="Estoque Normal (≥ 20)" value={Number(stats?.normal ?? 0).toLocaleString('pt-BR')} icon={CheckCircle} />
+        <KPICard
+          title={rule ? `Estoque Crítico (≤ ${rule.limite_critico})` : 'Estoque Crítico'}
+          value={Number(stats?.critico ?? 0).toLocaleString('pt-BR')}
+          icon={AlertTriangle}
+        />
+        <KPICard
+          title={rule ? `Estoque Baixo (${rule.limite_critico + 1}–${rule.limite_baixo})` : 'Estoque Baixo'}
+          value={Number(stats?.baixo ?? 0).toLocaleString('pt-BR')}
+          icon={Clock}
+        />
+        <KPICard
+          title={rule ? `Estoque Normal (> ${rule.limite_atencao})` : 'Estoque Normal'}
+          value={Number(stats?.normal ?? 0).toLocaleString('pt-BR')}
+          icon={CheckCircle}
+        />
       </div>
 
       {/* Charts */}

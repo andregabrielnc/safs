@@ -1,6 +1,7 @@
 import React from 'react';
-import { LayoutDashboard, Package, Sun, Moon, Activity, Bell } from 'lucide-react';
+import { LayoutDashboard, Package, Sun, Moon, Activity, Bell, LogOut, BellRing } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
+import type { AuthUser } from '../utils/api';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -11,17 +12,27 @@ interface LayoutProps {
   almox: number;
   almoxarifados: { seq: number; descricao: string }[];
   onAlmoxChange: (seq: number) => void;
+  user: AuthUser;
+  onLogout: () => void;
 }
 
 const navItems = [
-  { id: 'dashboard',     label: 'Dashboard',     icon: LayoutDashboard },
-  { id: 'materiais',     label: 'Materiais G36',  icon: Package },
-  { id: 'monitoramento', label: 'Monitoramento',  icon: Bell },
+  { id: 'dashboard',     label: 'Dashboard',         icon: LayoutDashboard },
+  { id: 'materiais',     label: 'Materiais G36',     icon: Package },
+  { id: 'monitorados',   label: 'Itens Monitorados', icon: BellRing },
+  { id: 'monitoramento', label: 'Monitoramento',     icon: Bell },
 ];
+
+function userInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 export const AppLayout: React.FC<LayoutProps> = ({
   children, theme, toggleTheme, currentPage, onNavigate,
-  almox, almoxarifados, onAlmoxChange,
+  almox, almoxarifados, onAlmoxChange, user, onLogout,
 }) => {
   return (
     <div className="dashboard-container">
@@ -77,18 +88,41 @@ export const AppLayout: React.FC<LayoutProps> = ({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <NotificationBell onNavigateMonitorados={() => onNavigate('monitorados')} />
-            <button onClick={toggleTheme} style={{
+            <button onClick={toggleTheme} title={theme === 'dark' ? 'Tema claro' : 'Tema escuro'} style={{
               background: 'var(--panel-highlight)', border: '1px solid var(--panel-border)',
               borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer',
               color: 'var(--text-main)', display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            <div style={{
-              width: '34px', height: '34px', borderRadius: '50%',
-              background: 'var(--primary)', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', color: 'var(--bg-dark)', fontWeight: 700, fontSize: '0.8rem',
-            }}>AG</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingLeft: '8px', borderLeft: '1px solid var(--panel-border)' }}>
+              <div title={user.email} style={{
+                width: '34px', height: '34px', borderRadius: '50%',
+                background: 'var(--primary)', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', color: 'var(--bg-dark)', fontWeight: 700, fontSize: '0.8rem',
+              }}>{userInitials(user.name)}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-main)', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {user.name}
+                </span>
+                <span style={{ fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                  {user.username}
+                </span>
+              </div>
+              <button
+                onClick={onLogout}
+                title="Sair"
+                aria-label="Sair"
+                style={{
+                  background: 'var(--panel-highlight)', border: '1px solid var(--panel-border)',
+                  borderRadius: '50%', width: '36px', height: '36px', cursor: 'pointer',
+                  color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  marginLeft: '4px',
+                }}
+              >
+                <LogOut size={15} />
+              </button>
+            </div>
           </div>
         </div>
         {children}
