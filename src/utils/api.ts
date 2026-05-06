@@ -97,6 +97,8 @@ export interface MaterialDetalhe {
   qtde_ponto_pedido: number;
   dt_ultimo_consumo: string | null;
   dt_ultima_compra: string | null;
+  media_consumo_mensal: number;
+  dias_ate_ruptura: number | null;
 }
 
 export interface Almoxarifado {

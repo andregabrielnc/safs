@@ -74,13 +74,16 @@ export const MaterialDetail: React.FC<Props> = ({ codigo, almox, onBack }) => {
 
   const estoque = Number(detalhe.estoque) || 0;
 
-  // Only complete months with real consumption for stats and trend (exclude current partial month)
+  // Source of truth: backend computes média e ruptura. Frontend só consome
+  // (corrige divergência histórica entre os dois cálculos).
+  const mediaConsumo    = Number(detalhe.media_consumo_mensal) || 0;
+  const diasAteRuptura  = detalhe.dias_ate_ruptura !== null && detalhe.dias_ate_ruptura !== undefined
+    ? Number(detalhe.dias_ate_ruptura)
+    : null;
+
+  // Lista local apenas para o gráfico (linha "Consumo Real" ao longo dos 24m)
   const currentMonth = new Date().toISOString().slice(0, 7);
   const mesesConsumo = consumo.filter(c => c.quantidade !== null && Number(c.quantidade) > 0 && c.competencia < currentMonth);
-  const mediaConsumo = mesesConsumo.length
-    ? mesesConsumo.slice(-6).reduce((s, c) => s + Number(c.quantidade), 0) / Math.min(mesesConsumo.length, 6)
-    : 0;
-  const diasAteRuptura = mediaConsumo > 0 ? Math.round(estoque / (mediaConsumo / 30)) : null;
 
   // alerta comes from backend (uses configured criticality thresholds)
   const alerta = detalhe.alerta ?? (estoque === 0 ? 'critico' : 'normal');
